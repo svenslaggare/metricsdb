@@ -50,9 +50,11 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         let mut num_datapoints = 0;
         let mut max_datapoints_in_block = 0;
         for block_index in 0..self.storage.len() {
-            let block_length = self.storage.datapoints(block_index).unwrap().len();
-            num_datapoints += block_length;
-            max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+            self.storage.visit_datapoints(block_index, &mut |tags, datapoints| {
+                let block_length = datapoints.len();
+                num_datapoints += block_length;
+                max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+            });
         }
         println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
     }
@@ -221,19 +223,26 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(&Datapoint
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
-            let mut iterator = DatapointIterator::new(
-                start_time,
-                end_time,
-                block_start_time,
-                block_end_time,
-                storage.datapoints(block_index).unwrap().iter()
-            );
+            let mut outside_time_range = false;
+            storage.visit_datapoints(block_index, &mut |tags, datapoints| {
+                let mut iterator = DatapointIterator::new(
+                    start_time,
+                    end_time,
+                    block_start_time,
+                    block_end_time,
+                    datapoints.iter()
+                );
 
-            for datapoint in &mut iterator {
-                apply(datapoint);
-            }
+                for datapoint in &mut iterator {
+                    apply(datapoint);
+                }
 
-            if iterator.outside_time_range {
+                if iterator.outside_time_range {
+                    outside_time_range = true;
+                }
+            });
+
+            if outside_time_range {
                 break;
             }
         }
@@ -249,17 +258,19 @@ fn count_datapoints_in_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
             let mut outside_time_range = false;
-            for datapoint in storage.datapoints(block_index).unwrap().iter() {
-                let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                if datapoint_time > end_time {
-                    outside_time_range = true;
-                    break;
-                }
+            storage.visit_datapoints(block_index, &mut |tags, datapoints| {
+                for datapoint in datapoints.iter() {
+                    let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                    if datapoint_time > end_time {
+                        outside_time_range = true;
+                        break;
+                    }
 
-                if datapoint_time >= start_time {
-                    count += 1;
+                    if datapoint_time >= start_time {
+                        count += 1;
+                    }
                 }
-            }
+            });
 
             if outside_time_range {
                 break;

@@ -2,7 +2,7 @@ DEFAULT_DATAPOINT_DURATION = 0
 n: 12101966
 gauge: 3.02 s
 Num blocks: 1008
-Num datapoints: 12101966
+Num datapoints: 12101966, max datapoints: 12327
 count: 144328
 Avg: 0.6676723153748684
 average_linear_scan: 169.79 μs
@@ -44,6 +44,7 @@ Max: 152.47 μs
 858, 864, 861
 862, 864, 863
 862, 862, 862
+count: 144328
 95th: 0.8005487322807312
 95th: 1358.07 μs
 

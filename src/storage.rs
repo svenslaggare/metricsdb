@@ -18,7 +18,7 @@ pub trait DatabaseStorage {
     fn create_block(&mut self, time: Time);
     fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint);
 
-    fn datapoints(&self, block_index: usize) -> Option<&[Datapoint]>;
+    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint]));
 }
 
 pub struct DatabaseStorageVec {
@@ -245,11 +245,13 @@ impl DatabaseStorage for DatabaseStorageFile {
         }
     }
 
-    fn datapoints(&self, block_index: usize) -> Option<&[Datapoint]> {
+    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint])) {
         unsafe {
-            let block_ptr = self.block_at_ptr(block_index)?;
-            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>()) as *const Datapoint;
-            Some(std::slice::from_raw_parts(datapoints_ptr, (*block_ptr).num_datapoints))
+            if let Some(block_ptr) = self.block_at_ptr(block_index) {
+                let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>()) as *const Datapoint;
+                let datapoints = std::slice::from_raw_parts(datapoints_ptr, (*block_ptr).num_datapoints);
+                apply(0, datapoints);
+            }
         }
     }
 }
