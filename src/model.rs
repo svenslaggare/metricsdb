@@ -5,7 +5,6 @@ pub const TIME_SCALE: u64 = 1_000_000;
 #[derive(Clone)]
 pub struct Datapoint {
     pub time_offset: u32,
-    pub tags: Tags,
     pub value: f32
 }
 

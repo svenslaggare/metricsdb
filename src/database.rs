@@ -1,5 +1,7 @@
 use std::path::Path;
+
 use float_ord::FloatOrd;
+
 use crate::algorithms::StreamingHigherPercentile;
 use crate::model::{Datapoint, Tags, Time, TIME_SCALE};
 
@@ -46,10 +48,13 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     pub fn stats(&self) {
         println!("Num blocks: {}", self.storage.len());
         let mut num_datapoints = 0;
+        let mut max_datapoints_in_block = 0;
         for block_index in 0..self.storage.len() {
-            num_datapoints += self.storage.datapoints(block_index).unwrap().len();
+            let block_length = self.storage.datapoints(block_index).unwrap().len();
+            num_datapoints += block_length;
+            max_datapoints_in_block = max_datapoints_in_block.max(block_length);
         }
-        println!("Num datapoints: {}", num_datapoints);
+        println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
     }
 
     pub fn gauge(&mut self, time: f64, value: f64, tags: Tags) {
@@ -58,7 +63,6 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
 
         let mut datapoint = Datapoint {
             time_offset: 0,
-            tags,
             value
         };
 
@@ -70,7 +74,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
                 assert!(time_offset < u32::MAX as u64);
                 datapoint.time_offset = time_offset as u32;
 
-                let last_datapoint = self.storage.active_block_datapoints_mut()
+                let last_datapoint = self.storage.active_block_datapoints_mut(tags)
                     .map(|datapoint| datapoint.last_mut())
                     .flatten();
 
@@ -81,12 +85,14 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
                     }
                 }
 
-                self.storage.add_datapoint(datapoint);
+                self.storage.add_datapoint(tags, datapoint);
             } else {
-                self.storage.create_block(time, datapoint);
+                self.storage.create_block(time);
+                self.storage.add_datapoint(tags, datapoint);
             }
         } else {
-            self.storage.create_block(time, datapoint);
+            self.storage.create_block(time);
+            self.storage.add_datapoint(tags, datapoint);
         }
     }
 
