@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -10,7 +11,7 @@ mod helpers;
 mod memory_file;
 mod storage;
 mod database;
-mod algorithms;
+mod operations;
 mod model;
 
 #[derive(Deserialize)]
@@ -54,12 +55,22 @@ fn main() {
     }
 
     {
-        let _m = TimeMeasurement::new("Max", TimeMeasurementUnit::Microseconds);
+        let _m = TimeMeasurement::new("max", TimeMeasurementUnit::Microseconds);
         println!("Max: {}", database.max(TimeRange::new(start_time, end_time)).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
         println!("95th: {}", database.percentile(TimeRange::new(start_time, end_time), 95).unwrap());
+    }
+
+    {
+        let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);
+
+        let windows = database.average_in_window(TimeRange::new(start_time, end_time), Duration::from_secs_f64(30.0));
+        std::fs::write(
+            &Path::new("average_in_window.json"),
+            serde_json::to_string(&windows).unwrap()
+        ).unwrap();
     }
 }

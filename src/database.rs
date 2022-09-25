@@ -1,8 +1,7 @@
 use std::path::Path;
+use std::time::Duration;
 
-use float_ord::FloatOrd;
-
-use crate::algorithms::StreamingHigherPercentile;
+use crate::operations::{StreamingAverage, StreamingHigherPercentileF64, StreamingMax, StreamingOperation};
 use crate::model::{Datapoint, Tags, Time, TIME_SCALE};
 use crate::storage::DatabaseStorage;
 use crate::storage::file::DatabaseStorageFile;
@@ -100,80 +99,97 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn average(&self, range: TimeRange) -> Option<f64> {
-        let (start_time, end_time) = range.int_range();
-        assert!(end_time > start_time);
-
-        let start_block_index = find_block_index(&self.storage, start_time)?;
-
-        let mut sum = 0.0;
-        let mut count = 0;
-
-        visit_datapoints_in_time_range(
-            &self.storage,
-            start_time,
-            end_time,
-            start_block_index,
-            |datapoint| {
-                sum += datapoint.value as f64;
-                count += 1;
-            }
-        );
-
-        println!("count: {}", count);
-        if count == 0 {
-            return Some(0.0);
-        }
-
-        Some(sum / count as f64)
+        self.operation(range, |_| StreamingAverage::new(), false)
     }
 
     pub fn max(&self, range: TimeRange) -> Option<f64> {
-        let (start_time, end_time) = range.int_range();
-        assert!(end_time > start_time);
-
-        let start_block_index = find_block_index(&self.storage, start_time)?;
-
-        let mut max = f64::NEG_INFINITY;
-        visit_datapoints_in_time_range(
-            &self.storage,
-            start_time,
-            end_time,
-            start_block_index,
-            |datapoint| {
-                max = max.max(datapoint.value as f64);
-            }
-        );
-
-        Some(max)
+        self.operation(range, |_| StreamingMax::new(), false)
     }
 
     pub fn percentile(&self, range: TimeRange, percentile: i32) -> Option<f64> {
+        self.operation(range, |count| StreamingHigherPercentileF64::new(count.unwrap(), percentile), true)
+    }
+
+    fn operation<T: StreamingOperation<f64>, F: Fn(Option<usize>) -> T>(&self, range: TimeRange, create_op: F, require_count: bool) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
         let start_block_index = find_block_index(&self.storage, start_time)?;
 
-        let count = count_datapoints_in_time_range(
-            &self.storage,
-            start_time,
-            end_time,
-            start_block_index
-        );
+        let count = if require_count {
+            Some(
+                count_datapoints_in_time_range(
+                    &self.storage,
+                    start_time,
+                    end_time,
+                    start_block_index
+                )
+            )
+        } else {
+            None
+        };
 
-        println!("count: {}", count);
-
-        let mut streaming_percentile = StreamingHigherPercentile::new(count, percentile);
+        let mut streaming_operation = create_op(count);
         visit_datapoints_in_time_range(
             &self.storage,
             start_time,
             end_time,
             start_block_index,
-            |datapoint| {
-                streaming_percentile.add(FloatOrd(datapoint.value as f64));
+            |_, datapoint| {
+                streaming_operation.add(datapoint.value as f64);
             }
         );
 
-        streaming_percentile.value().map(|x| x.0)
+        streaming_operation.value()
+    }
+
+    pub fn average_in_window(&self, range: TimeRange, duration: Duration) -> Vec<(f64, f64)> {
+        self.operation_in_window(range, duration, || StreamingAverage::new())
+    }
+
+    pub fn max_in_window(&self, range: TimeRange, duration: Duration) -> Vec<(f64, f64)> {
+        self.operation_in_window(range, duration, || StreamingMax::new())
+    }
+
+    fn operation_in_window<T: StreamingOperation<f64>, F: Fn() -> T>(&self, range: TimeRange, duration: Duration, create_op: F) -> Vec<(f64, f64)> {
+        let (start_time, end_time) = range.int_range();
+        assert!(end_time > start_time);
+
+        let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
+
+        let start_block_index = match find_block_index(&self.storage, start_time) {
+            Some(start_block_index) => start_block_index,
+            None => { return Vec::new(); }
+        };
+
+        let mut windows = Vec::<(Time, T)>::new();
+        visit_datapoints_in_time_range(
+            &self.storage,
+            start_time,
+            end_time,
+            start_block_index,
+            |block_start_time, datapoint| {
+                let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                if let Some(instance) = windows.last_mut() {
+                    if datapoint_time - instance.0 < duration {
+                        instance.1.add(datapoint.value as f64);
+                    } else {
+                        let mut op = create_op();
+                        op.add(datapoint.value as f64);
+                        windows.push((datapoint_time, op));
+                    }
+                } else {
+                    let mut op = create_op();
+                    op.add(datapoint.value as f64);
+                    windows.push((datapoint_time, op));
+                }
+            }
+        );
+
+        windows
+            .iter()
+            .map(|(start, operation)| ((start / TIME_SCALE) as f64, operation.value().unwrap()))
+            .collect()
     }
 }
 
@@ -200,11 +216,11 @@ fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Time) -
     Some(lower)
 }
 
-fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(&Datapoint)>(storage: &TStorage,
-                                                                                   start_time: Time,
-                                                                                   end_time: Time,
-                                                                                   start_block_index: usize,
-                                                                                   mut apply: F) {
+fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Datapoint)>(storage: &TStorage,
+                                                                                         start_time: Time,
+                                                                                         end_time: Time,
+                                                                                         start_block_index: usize,
+                                                                                         mut apply: F) {
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
@@ -219,7 +235,7 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(&Datapoint
                 );
 
                 for datapoint in &mut iterator {
-                    apply(datapoint);
+                    apply(block_start_time, datapoint);
                 }
 
                 if iterator.outside_time_range {

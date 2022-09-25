@@ -1,4 +1,4 @@
 /target
-output.json
+*.json
 metrics
 .idea

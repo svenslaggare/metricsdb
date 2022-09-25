@@ -6,6 +6,73 @@ use float_ord::FloatOrd;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 
+pub trait StreamingOperation<T> {
+    fn add(&mut self, value: T);
+    fn value(&self) -> Option<T>;
+}
+
+pub struct StreamingAverage<T> {
+    sum: T,
+    count: i32
+}
+
+impl<T: Default> StreamingAverage<T> {
+    pub fn new() -> StreamingAverage<T> {
+        StreamingAverage {
+            sum: Default::default(),
+            count: 0
+        }
+    }
+
+    pub fn with_initial(value: T) -> StreamingAverage<T> {
+        StreamingAverage {
+            sum: value,
+            count: 1
+        }
+    }
+}
+
+impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> StreamingOperation<T> for StreamingAverage<T> {
+    fn add(&mut self, value: T) {
+        self.sum += value;
+        self.count += 1;
+    }
+
+    fn value(&self) -> Option<T> {
+        if self.count > 0 {
+            Some(self.sum.clone() / self.count.into())
+        } else {
+            None
+        }
+    }
+}
+
+pub struct StreamingMax {
+    max: Option<f64>
+}
+
+impl StreamingMax {
+    pub fn new() -> StreamingMax {
+        StreamingMax {
+            max: None
+        }
+    }
+}
+
+impl StreamingOperation<f64> for StreamingMax {
+    fn add(&mut self, value: f64) {
+        if let Some(max) = self.max.as_mut() {
+            *max = max.max(value);
+        } else {
+            self.max = Some(value);
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.max
+    }
+}
+
 pub struct StreamingHigherPercentile<T: Ord + Clone> {
     percentile_count: usize,
     values: BinaryHeap<Entry<T>>
@@ -19,7 +86,13 @@ impl<T: Ord + Clone> StreamingHigherPercentile<T> {
         }
     }
 
-    pub fn add(&mut self, value: T) {
+    fn all_values(&self) -> Vec<T> {
+        self.values.iter().map(|x| x.value.clone()).collect()
+    }
+}
+
+impl<T: Ord + Clone> StreamingOperation<T> for StreamingHigherPercentile<T> {
+    fn add(&mut self, value: T) {
         if self.values.len() < self.percentile_count {
             self.values.push(Entry::new(value));
         } else if let Some(min) = self.values.peek() {
@@ -30,12 +103,30 @@ impl<T: Ord + Clone> StreamingHigherPercentile<T> {
         }
     }
 
-    pub fn value(&self) -> Option<T> {
+    fn value(&self) -> Option<T> {
         self.values.peek().map(|e| e.value.clone())
     }
+}
 
-    fn all_values(&self) -> Vec<T> {
-        self.values.iter().map(|x| x.value.clone()).collect()
+pub struct StreamingHigherPercentileF64 {
+    inner: StreamingHigherPercentile<FloatOrd<f64>>
+}
+
+impl StreamingHigherPercentileF64 {
+    pub fn new(count: usize, percentile: i32) -> StreamingHigherPercentileF64{
+        StreamingHigherPercentileF64 {
+            inner: StreamingHigherPercentile::new(count, percentile)
+        }
+    }
+}
+
+impl StreamingOperation<f64> for StreamingHigherPercentileF64{
+    fn add(&mut self, value: f64) {
+        self.inner.add(FloatOrd(value));
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.inner.value().map(|x| x.0)
     }
 }
 
@@ -77,7 +168,13 @@ impl<T: Ord + Clone> StreamingLowerPercentile<T> {
         }
     }
 
-    pub fn add(&mut self, value: T) {
+    fn all_values(&self) -> Vec<T> {
+        self.values.iter().map(|x| x.clone()).collect()
+    }
+}
+
+impl<T: Ord + Clone> StreamingOperation<T> for StreamingLowerPercentile<T> {
+    fn add(&mut self, value: T) {
         if self.values.len() < self.percentile_count {
             self.values.push(value);
         } else if let Some(max) = self.values.peek() {
@@ -88,12 +185,8 @@ impl<T: Ord + Clone> StreamingLowerPercentile<T> {
         }
     }
 
-    pub fn value(&self) -> Option<T> {
-        self.values.peek().cloned()
-    }
-
-    fn all_values(&self) -> Vec<T> {
-        self.values.iter().map(|x| x.clone()).collect()
+    fn value(&self) -> Option<T> {
+        self.values.peek().map(|e| e.clone())
     }
 }
 
