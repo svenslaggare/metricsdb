@@ -56,7 +56,7 @@ impl DatabaseStorageFile {
         }
     }
 
-    fn get_sub_block(&mut self, block_ptr: *mut FileBlock, tags: Tags) -> Option<&mut FileSubBlock> {
+    fn allocate_sub_block_for_insertion(&mut self, block_ptr: *mut FileBlock, tags: Tags) -> Option<&mut FileSubBlock> {
         let default_capacity = 100;
         let growth_factor = 2;
 
@@ -181,7 +181,7 @@ impl DatabaseStorage for DatabaseStorageFile {
             let active_block = self.active_block_mut();
             (*active_block).end_time = (*active_block).end_time.max((*active_block).start_time + datapoint.time_offset as Time);
 
-            let sub_block = self.get_sub_block(active_block, tags).unwrap();
+            let sub_block = self.allocate_sub_block_for_insertion(active_block, tags).unwrap();
             sub_block.add_datapoint(active_block, datapoint);
         }
     }
