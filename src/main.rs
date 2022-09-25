@@ -45,26 +45,21 @@ fn main() {
     // Avg: 0.6676723153748684
     {
         let _m = TimeMeasurement::new("average_linear_scan", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false).unwrap());
-    }
-
-    {
-        let _m = TimeMeasurement::new("average_linear_scan", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false).unwrap());
+        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time)).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), true).unwrap());
+        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time)).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("Max", TimeMeasurementUnit::Microseconds);
-        println!("Max: {}", database.max(TimeRange::new(start_time, end_time), true).unwrap());
+        println!("Max: {}", database.max(TimeRange::new(start_time, end_time)).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
-        println!("95th: {}", database.percentile(TimeRange::new(start_time, end_time), true, 95).unwrap());
+        println!("95th: {}", database.percentile(TimeRange::new(start_time, end_time), 95).unwrap());
     }
 }

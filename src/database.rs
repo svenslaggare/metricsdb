@@ -99,15 +99,11 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }
     }
 
-    pub fn average(&self, range: TimeRange, binary_search: bool) -> Option<f64> {
+    pub fn average(&self, range: TimeRange) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
-        let start_block_index = if binary_search {
-            find_block_index(&self.storage, start_time)
-        } else {
-            Some(0)
-        }?;
+        let start_block_index = find_block_index(&self.storage, start_time)?;
 
         let mut sum = 0.0;
         let mut count = 0;
@@ -131,15 +127,11 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         Some(sum / count as f64)
     }
 
-    pub fn max(&self, range: TimeRange, binary_search: bool) -> Option<f64> {
+    pub fn max(&self, range: TimeRange) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
-        let start_block_index = if binary_search {
-            find_block_index(&self.storage, start_time)
-        } else {
-            Some(0)
-        }?;
+        let start_block_index = find_block_index(&self.storage, start_time)?;
 
         let mut max = f64::NEG_INFINITY;
         visit_datapoints_in_time_range(
@@ -155,15 +147,11 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         Some(max)
     }
 
-    pub fn percentile(&self, range: TimeRange, binary_search: bool, percentile: i32) -> Option<f64> {
+    pub fn percentile(&self, range: TimeRange, percentile: i32) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
-        let start_block_index = if binary_search {
-            find_block_index(&self.storage, start_time)
-        } else {
-            Some(0)
-        }?;
+        let start_block_index = find_block_index(&self.storage, start_time)?;
 
         let count = count_datapoints_in_time_range(
             &self.storage,
