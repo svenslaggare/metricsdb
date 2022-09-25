@@ -187,7 +187,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 }
 
-fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: u64) -> Option<usize> {
+fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
         return None;
     }
