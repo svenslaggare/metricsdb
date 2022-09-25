@@ -124,6 +124,9 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         );
 
         println!("count: {}", count);
+        if count == 0 {
+            return Some(0.0);
+        }
 
         Some(sum / count as f64)
     }
@@ -139,7 +142,6 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }?;
 
         let mut max = f64::NEG_INFINITY;
-
         visit_datapoints_in_time_range(
             &self.storage,
             start_time,
