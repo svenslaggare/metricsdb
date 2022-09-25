@@ -214,6 +214,7 @@ impl DatabaseStorage for DatabaseStorageFile {
                 start_time: time,
                 end_time: time,
                 num_datapoints: 0,
+                num_sub_blocks: 0,
                 next_sub_block_offset: 0,
                 sub_blocks: [Default::default(); 100]
             };
@@ -267,13 +268,14 @@ struct FileBlock {
     start_time: Time,
     end_time: Time,
     num_datapoints: usize,
+    num_sub_blocks: usize,
     next_sub_block_offset: usize,
     sub_blocks: [FileSubBlock; 100]
 }
 
 impl FileBlock {
     pub fn find_sub_block(&mut self, tags: Tags) -> Option<(&mut FileSubBlock)> {
-        for sub_block in &mut self.sub_blocks {
+        for sub_block in &mut self.sub_blocks[..self.num_sub_blocks] {
             if sub_block.count > 0 && sub_block.tags == tags {
                 return Some(sub_block);
             }
@@ -289,6 +291,7 @@ impl FileBlock {
                 sub_block.capacity = count;
                 sub_block.count = 0;
                 sub_block.tags = tags;
+                self.num_sub_blocks += 1;
                 self.next_sub_block_offset += count as usize * std::mem::size_of::<Datapoint>();
                 return true;
             }
