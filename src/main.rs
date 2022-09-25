@@ -45,22 +45,22 @@ fn main() {
     // Avg: 0.6676723153748684
     {
         let _m = TimeMeasurement::new("average_linear_scan", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false));
+        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average_linear_scan", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false));
+        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), false).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), true));
+        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time), true).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("Max", TimeMeasurementUnit::Microseconds);
-        println!("Max: {}", database.max(TimeRange::new(start_time, end_time), true));
+        println!("Max: {}", database.max(TimeRange::new(start_time, end_time), true).unwrap());
     }
 
     {

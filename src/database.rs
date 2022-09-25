@@ -99,7 +99,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }
     }
 
-    pub fn average(&self, range: TimeRange, binary_search: bool) -> f64 {
+    pub fn average(&self, range: TimeRange, binary_search: bool) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
@@ -107,29 +107,28 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             find_block_index(&self.storage, start_time)
         } else {
             Some(0)
-        };
+        }?;
 
         let mut sum = 0.0;
         let mut count = 0;
-        if let Some(start_block_index) = start_block_index {
-            visit_datapoints_in_time_range(
-                &self.storage,
-                start_time,
-                end_time,
-                start_block_index,
-                |datapoint| {
-                    sum += datapoint.value as f64;
-                    count += 1;
-                }
-            );
-        }
+
+        visit_datapoints_in_time_range(
+            &self.storage,
+            start_time,
+            end_time,
+            start_block_index,
+            |datapoint| {
+                sum += datapoint.value as f64;
+                count += 1;
+            }
+        );
 
         println!("count: {}", count);
 
-        sum / count as f64
+        Some(sum / count as f64)
     }
 
-    pub fn max(&self, range: TimeRange, binary_search: bool) -> f64 {
+    pub fn max(&self, range: TimeRange, binary_search: bool) -> Option<f64> {
         let (start_time, end_time) = range.int_range();
         assert!(end_time > start_time);
 
@@ -137,22 +136,21 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             find_block_index(&self.storage, start_time)
         } else {
             Some(0)
-        };
+        }?;
 
         let mut max = f64::NEG_INFINITY;
-        if let Some(start_block_index) = start_block_index {
-            visit_datapoints_in_time_range(
-                &self.storage,
-                start_time,
-                end_time,
-                start_block_index,
-                |datapoint| {
-                    max = max.max(datapoint.value as f64);
-                }
-            );
-        }
 
-        max
+        visit_datapoints_in_time_range(
+            &self.storage,
+            start_time,
+            end_time,
+            start_block_index,
+            |datapoint| {
+                max = max.max(datapoint.value as f64);
+            }
+        );
+
+        Some(max)
     }
 
     pub fn percentile(&self, range: TimeRange, binary_search: bool, percentile: i32) -> Option<f64> {
@@ -163,33 +161,29 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             find_block_index(&self.storage, start_time)
         } else {
             Some(0)
-        };
+        }?;
 
-        if let Some(start_block_index) = start_block_index {
-            let count = count_datapoints_in_time_range(
-                &self.storage,
-                start_time,
-                end_time,
-                start_block_index
-            );
+        let count = count_datapoints_in_time_range(
+            &self.storage,
+            start_time,
+            end_time,
+            start_block_index
+        );
 
-            println!("count: {}", count);
+        println!("count: {}", count);
 
-            let mut streaming_percentile = StreamingHigherPercentile::new(count, percentile);
-            visit_datapoints_in_time_range(
-                &self.storage,
-                start_time,
-                end_time,
-                start_block_index,
-                |datapoint| {
-                    streaming_percentile.add(FloatOrd(datapoint.value as f64));
-                }
-            );
+        let mut streaming_percentile = StreamingHigherPercentile::new(count, percentile);
+        visit_datapoints_in_time_range(
+            &self.storage,
+            start_time,
+            end_time,
+            start_block_index,
+            |datapoint| {
+                streaming_percentile.add(FloatOrd(datapoint.value as f64));
+            }
+        );
 
-            streaming_percentile.value().map(|x| x.0)
-        } else {
-            None
-        }
+        streaming_percentile.value().map(|x| x.0)
     }
 }
 
