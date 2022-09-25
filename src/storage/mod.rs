@@ -1,0 +1,24 @@
+use std::path::Path;
+
+use crate::model::{Datapoint, Tags, Time};
+
+pub trait DatabaseStorage {
+    fn new(base_path: &Path) -> Self;
+    fn from_existing(base_path: &Path) -> Self;
+
+    fn len(&self) -> usize;
+    fn has_blocks(&self) -> bool;
+
+    fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
+
+    fn active_block_start_time(&self) -> Option<Time>;
+    fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint]>;
+
+    fn create_block(&mut self, time: Time);
+    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint);
+
+    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint]));
+}
+
+pub mod file;
+pub mod memory;

@@ -1,95 +1,9 @@
 use std::path::Path;
 
 use crate::memory_file::MemoryFile;
-use crate::model::{Datapoint, Tags, Time};
-
-pub trait DatabaseStorage {
-    fn new(base_path: &Path) -> Self;
-    fn from_existing(base_path: &Path) -> Self;
-
-    fn len(&self) -> usize;
-    fn has_blocks(&self) -> bool;
-
-    fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
-
-    fn active_block_start_time(&self) -> Option<Time>;
-    fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint]>;
-
-    fn create_block(&mut self, time: Time);
-    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint);
-
-    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint]));
-}
-
-pub struct DatabaseStorageVec {
-    blocks: Vec<VecBlock>,
-    active_block_index: Option<usize>
-}
-
-// impl DatabaseStorage for DatabaseStorageVec {
-//     fn new(_base_path: &Path) -> Self {
-//         DatabaseStorageVec {
-//             blocks: Vec::new(),
-//             active_block_index: None
-//         }
-//     }
-//
-//     fn from_existing(_base_path: &Path) -> Self {
-//         DatabaseStorageVec {
-//             blocks: Vec::new(),
-//             active_block_index: None
-//         }
-//     }
-//
-//     fn len(&self) -> usize {
-//         self.blocks.len()
-//     }
-//
-//     fn has_blocks(&self) -> bool {
-//         self.active_block_index.is_some()
-//     }
-//
-//     fn block_start_time(&self, index: usize) -> Option<Time> {
-//         self.blocks.get(index).map(|block| block.start_time)
-//     }
-//
-//     fn active_block_start_time(&self) -> Option<Time> {
-//         Some(self.blocks[self.active_block_index?].start_time)
-//     }
-//
-//     fn active_block_datapoints_mut(&mut self) -> Option<&mut [Datapoint]> {
-//         self.datapoints_mut(self.active_block_index?)
-//     }
-//
-//     fn create_block(&mut self, time: Time, datapoint: Datapoint) {
-//         self.active_block_index = Some(self.blocks.len());
-//         self.blocks.push(VecBlock {
-//             start_time: time,
-//             datapoints: vec![datapoint]
-//         });
-//     }
-//
-//     fn add_datapoint(&mut self, datapoint: Datapoint) {
-//         if let Some(active_block_index) = self.active_block_index {
-//             self.blocks[active_block_index].datapoints.push(datapoint);
-//         }
-//     }
-//
-//     fn datapoints(&self, block_index: usize) -> Option<&[Datapoint]> {
-//         let block = self.blocks.get(block_index)?;
-//         Some(&block.datapoints[..])
-//     }
-//
-//     fn datapoints_mut(&mut self, block_index: usize) -> Option<&mut [Datapoint]> {
-//         let block = self.blocks.get_mut(block_index)?;
-//         Some(&mut block.datapoints[..])
-//     }
-// }
-//
-struct VecBlock {
-    start_time: Time,
-    datapoints: Vec<Datapoint>
-}
+use crate::model::{Datapoint, Time};
+use crate::storage::DatabaseStorage;
+use crate::Tags;
 
 pub struct DatabaseStorageFile {
     storage_file: MemoryFile,
@@ -142,11 +56,48 @@ impl DatabaseStorageFile {
         }
     }
 
-    fn datapoints_mut(&mut self, block_index: usize) -> Option<&mut [Datapoint]> {
+    fn get_sub_block(&mut self, block_ptr: *mut FileBlock, tags: Tags) -> Option<&mut FileSubBlock> {
+        let default_capacity = 100;
+        let growth_factor = 2;
+
         unsafe {
-            let block_ptr = self.block_at_ptr(block_index)?;
-            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>()) as *mut Datapoint;
-            Some(std::slice::from_raw_parts_mut(datapoints_ptr, (*block_ptr).num_datapoints))
+            let mut allocate_file = |active_block: *mut FileBlock, size: usize| {
+                self.storage_file.try_grow_file(size).unwrap();
+                (*active_block).size += size;
+            };
+
+            if let Some((sub_block_index, sub_block)) = (*block_ptr).find_sub_block(tags) {
+                if sub_block.count < sub_block.capacity {
+                    Some(sub_block)
+                } else {
+                    let desired_capacity = sub_block.count * growth_factor;
+                    if let Some(increased_capacity) = (*block_ptr).try_extend(sub_block_index, sub_block, desired_capacity) {
+                        allocate_file(block_ptr, increased_capacity as usize * std::mem::size_of::<Datapoint>());
+                        Some(sub_block)
+                    } else {
+                        if let Some((new_sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, desired_capacity) {
+                            if allocated {
+                                allocate_file(block_ptr, new_sub_block.datapoints_size());
+                            }
+
+                            new_sub_block.replace_at(block_ptr, sub_block);
+                            Some(new_sub_block)
+                        } else {
+                            None
+                        }
+                    }
+                }
+            } else {
+                if let Some((sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, default_capacity) {
+                    if allocated {
+                        allocate_file(block_ptr, sub_block.datapoints_size());
+                    }
+
+                    Some(sub_block)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -197,8 +148,9 @@ impl DatabaseStorage for DatabaseStorageFile {
             return None;
         }
 
-        let block_index = unsafe { (*self.header_mut()).active_block_index };
-        self.datapoints_mut(block_index)
+        unsafe {
+            (*self.active_block_mut()).datapoints_mut(tags)
+        }
     }
 
     fn create_block(&mut self, time: Time) {
@@ -213,7 +165,6 @@ impl DatabaseStorage for DatabaseStorageFile {
                 size: std::mem::size_of::<FileBlock>(),
                 start_time: time,
                 end_time: time,
-                num_datapoints: 0,
                 num_sub_blocks: 0,
                 next_sub_block_offset: 0,
                 sub_blocks: [Default::default(); 100]
@@ -230,28 +181,17 @@ impl DatabaseStorage for DatabaseStorageFile {
             let active_block = self.active_block_mut();
             (*active_block).end_time = (*active_block).end_time.max((*active_block).start_time + datapoint.time_offset as Time);
 
-            let num_datapoints = (*active_block).num_datapoints;
-
-            self.storage_file.try_grow_file(std::mem::size_of::<Datapoint>()).unwrap();
-            let datapoint_ptr: *mut Datapoint = std::mem::transmute(
-                self.storage_file.ptr_mut().add(
-                    (*self.header()).active_block_start + std::mem::size_of::<FileBlock>()
-                        + num_datapoints * std::mem::size_of::<Datapoint>()
-                )
-            );
-            *datapoint_ptr = datapoint;
-
-            (*active_block).num_datapoints += 1;
-            (*active_block).size += std::mem::size_of::<Datapoint>();
+            let sub_block = self.get_sub_block(active_block, tags).unwrap();
+            sub_block.add_datapoint(active_block, datapoint);
         }
     }
 
     fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint])) {
         unsafe {
             if let Some(block_ptr) = self.block_at_ptr(block_index) {
-                let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>()) as *const Datapoint;
-                let datapoints = std::slice::from_raw_parts(datapoints_ptr, (*block_ptr).num_datapoints);
-                apply(0, datapoints);
+                for sub_block in &(*block_ptr).sub_blocks[..(*block_ptr).num_sub_blocks] {
+                    apply(sub_block.tags, sub_block.datapoints(block_ptr));
+                }
             }
         }
     }
@@ -267,37 +207,59 @@ struct FileBlock {
     size: usize,
     start_time: Time,
     end_time: Time,
-    num_datapoints: usize,
     num_sub_blocks: usize,
     next_sub_block_offset: usize,
     sub_blocks: [FileSubBlock; 100]
 }
 
 impl FileBlock {
-    pub fn find_sub_block(&mut self, tags: Tags) -> Option<(&mut FileSubBlock)> {
-        for sub_block in &mut self.sub_blocks[..self.num_sub_blocks] {
+    pub fn datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint]> {
+        let block_ptr = self as *mut FileBlock;
+        let (_, sub_block) = self.find_sub_block(tags)?;
+        Some(sub_block.datapoints_mut(block_ptr))
+    }
+
+    pub fn find_sub_block(&mut self, tags: Tags) -> Option<(usize, &mut FileSubBlock)> {
+        for (index, sub_block) in self.sub_blocks[..self.num_sub_blocks].iter_mut().enumerate() {
             if sub_block.count > 0 && sub_block.tags == tags {
-                return Some(sub_block);
+                return Some((index, sub_block));
             }
         }
 
         None
     }
 
-    pub fn create_sub_block(&mut self, tags: Tags, count: u32) -> bool {
+    pub fn allocate_sub_block(&mut self, tags: Tags, capacity: u32) -> Option<(&mut FileSubBlock, bool)> {
         for sub_block in &mut self.sub_blocks {
+            if sub_block.count == 0 && sub_block.capacity >= capacity {
+                sub_block.tags = tags;
+                return Some((sub_block, false));
+            }
+
             if sub_block.capacity == 0 {
                 sub_block.offset = self.next_sub_block_offset;
-                sub_block.capacity = count;
+                sub_block.capacity = capacity;
                 sub_block.count = 0;
                 sub_block.tags = tags;
                 self.num_sub_blocks += 1;
-                self.next_sub_block_offset += count as usize * std::mem::size_of::<Datapoint>();
-                return true;
+                self.next_sub_block_offset += sub_block.datapoints_size();
+                return Some((sub_block, true));
             }
         }
 
-        return false;
+        None
+    }
+
+    pub fn try_extend(&mut self, index: usize, sub_block: &mut FileSubBlock, new_capacity: u32) -> Option<u32> {
+        if index == self.num_sub_blocks - 1 {
+            assert!(new_capacity > sub_block.capacity);
+            let increased_capacity = new_capacity - sub_block.capacity;
+            self.next_sub_block_offset += increased_capacity as usize * std::mem::size_of::<Datapoint>();
+            sub_block.capacity = new_capacity;
+            Some(increased_capacity)
+        } else {
+            None
+        }
     }
 }
 
@@ -310,6 +272,24 @@ struct FileSubBlock {
 }
 
 impl FileSubBlock {
+    pub fn free(&mut self) {
+        self.count = 0;
+        self.tags = 0;
+    }
+
+    pub fn datapoints_size(&self) -> usize {
+        std::mem::size_of::<Datapoint>() * self.capacity as usize
+    }
+
+    pub fn add_datapoint(&mut self, block_ptr: *const FileBlock, datapoint: Datapoint) {
+        unsafe {
+            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>() + self.offset) as *mut Datapoint;
+            *datapoints_ptr.add(self.count as usize) = datapoint;
+        }
+
+        self.count += 1;
+    }
+
     pub fn datapoints(&self, block_ptr: *const FileBlock) -> &[Datapoint] {
         unsafe {
             let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>() + self.offset) as *const Datapoint;
@@ -322,6 +302,12 @@ impl FileSubBlock {
             let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<FileBlock>() + self.offset) as *mut Datapoint;
             std::slice::from_raw_parts_mut(datapoints_ptr, self.count as usize)
         }
+    }
+
+    pub fn replace_at(&mut self, block_ptr: *const FileBlock, other: &mut FileSubBlock) {
+        self.count = other.count;
+        self.datapoints_mut(block_ptr).clone_from_slice(other.datapoints(block_ptr));
+        other.free();
     }
 }
 

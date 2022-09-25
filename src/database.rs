@@ -4,8 +4,9 @@ use float_ord::FloatOrd;
 
 use crate::algorithms::StreamingHigherPercentile;
 use crate::model::{Datapoint, Tags, Time, TIME_SCALE};
+use crate::storage::DatabaseStorage;
+use crate::storage::file::DatabaseStorageFile;
 
-use crate::storage::{DatabaseStorage, DatabaseStorageFile, DatabaseStorageVec};
 use crate::TimeRange;
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;

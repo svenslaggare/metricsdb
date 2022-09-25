@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::database::{DefaultDatabase};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use crate::model::TimeRange;
+use crate::model::{Tags, TimeRange};
 
 mod helpers;
 mod memory_file;
@@ -29,7 +29,9 @@ fn main() {
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            database.gauge(data.times[index], data.values[index] as f64, 0);
+            // let tags: Tags = 0;
+            let tags = (index % 2) as Tags;
+            database.gauge(data.times[index], data.values[index] as f64, tags);
         }
     }
 
