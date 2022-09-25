@@ -17,7 +17,7 @@ pub trait DatabaseStorage {
     fn create_block(&mut self, time: Time);
     fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint);
 
-    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint]));
+    fn visit_datapoints<F: FnMut(Tags, &[Datapoint])>(&self, block_index: usize, apply: F);
 }
 
 pub mod file;

@@ -29,8 +29,8 @@ fn main() {
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags: Tags = 0;
-            let tags = (index % 2) as Tags;
+            let tags: Tags = 0;
+            // let tags = (index % 2) as Tags;
             database.gauge(data.times[index], data.values[index] as f64, tags);
         }
     }

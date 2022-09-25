@@ -16,6 +16,8 @@ pub struct TimeRange {
 
 impl TimeRange {
     pub fn new(start: f64, end: f64) -> TimeRange {
+        assert!(end > start);
+
         TimeRange {
             start,
             end

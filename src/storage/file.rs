@@ -5,6 +5,9 @@ use crate::model::{Datapoint, Time};
 use crate::storage::DatabaseStorage;
 use crate::Tags;
 
+const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
+const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
+
 pub struct DatabaseStorageFile {
     storage_file: MemoryFile,
     index_file: MemoryFile
@@ -102,9 +105,6 @@ impl DatabaseStorageFile {
     }
 }
 
-const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
-const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
-
 impl DatabaseStorage for DatabaseStorageFile {
     fn new(base_path: &Path) -> Self {
         let mut storage = DatabaseStorageFile {
@@ -186,7 +186,7 @@ impl DatabaseStorage for DatabaseStorageFile {
         }
     }
 
-    fn visit_datapoints(&self, block_index: usize, apply: &mut dyn FnMut(Tags, &[Datapoint])) {
+    fn visit_datapoints<F: FnMut(Tags, &[Datapoint])>(&self, block_index: usize, mut apply: F) {
         unsafe {
             if let Some(block_ptr) = self.block_at_ptr(block_index) {
                 for sub_block in &(*block_ptr).sub_blocks[..(*block_ptr).num_sub_blocks] {
