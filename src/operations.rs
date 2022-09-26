@@ -40,6 +40,12 @@ impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> 
     }
 }
 
+impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> Default for StreamingAverage<T> {
+    fn default() -> Self {
+        StreamingAverage::new()
+    }
+}
+
 pub struct StreamingMax {
     max: Option<f64>
 }
@@ -63,6 +69,12 @@ impl StreamingOperation<f64> for StreamingMax {
 
     fn value(&self) -> Option<f64> {
         self.max
+    }
+}
+
+impl Default for StreamingMax {
+    fn default() -> Self {
+        StreamingMax::new()
     }
 }
 
@@ -180,6 +192,83 @@ impl<T: Ord + Clone> StreamingOperation<T> for StreamingLowerPercentile<T> {
 
     fn value(&self) -> Option<T> {
         self.values.peek().map(|e| e.clone())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TransformOperation {
+    Abs,
+    Max(f64),
+    Min(f64),
+    Round,
+    Ceil,
+    Floor,
+    Sqrt,
+    Square,
+    Power(f64),
+    Exponential,
+    LogE,
+    LogBase(f64),
+    Sin,
+    Cos,
+    Tan
+}
+
+impl TransformOperation {
+    pub fn apply(&self, value: f64) -> Option<f64> {
+        match self {
+            TransformOperation::Abs => Some(value.abs()),
+            TransformOperation::Max(other) => Some(value.max(*other)),
+            TransformOperation::Min(other) => Some(value.min(*other)),
+            TransformOperation::Round => Some(value.round()),
+            TransformOperation::Ceil => Some(value.ceil()),
+            TransformOperation::Floor => Some(value.floor()),
+            TransformOperation::Sqrt if value >= 0.0 => Some(value.sqrt()),
+            TransformOperation::Square => Some(value * value),
+            TransformOperation::Power(power) => Some(value.powf(*power)),
+            TransformOperation::Exponential => Some(value.exp()),
+            TransformOperation::LogE if value > 0.0 => Some(value.log2()),
+            TransformOperation::LogBase(base) if value > 0.0 => Some(value.log(*base)),
+            TransformOperation::Sin => Some(value.sin()),
+            TransformOperation::Cos => Some(value.cos()),
+            TransformOperation::Tan => Some(value.tan()),
+            _ => None
+        }
+    }
+}
+
+pub struct StreamingTransformOperation<T> {
+    operation: TransformOperation,
+    inner: T
+}
+
+impl<T: StreamingOperation<f64>> StreamingTransformOperation<T> {
+    pub fn new(operation: TransformOperation, inner: T) -> StreamingTransformOperation<T> {
+        StreamingTransformOperation {
+            operation,
+            inner
+        }
+    }
+}
+
+impl<T: StreamingOperation<f64> + Default> StreamingTransformOperation<T> {
+    pub fn from_default(operation: TransformOperation) -> StreamingTransformOperation<T> {
+        StreamingTransformOperation {
+            operation,
+            inner: Default::default()
+        }
+    }
+}
+
+impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformOperation<T> {
+    fn add(&mut self, value: f64) {
+        if let Some(value) = self.operation.apply(value) {
+            self.inner.add(value);
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.inner.value()
     }
 }
 

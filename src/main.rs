@@ -5,7 +5,8 @@ use serde::Deserialize;
 
 use crate::database::{DefaultDatabase};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use crate::model::{Tags, TimeRange};
+use crate::model::{Query, Tags, TimeRange};
+use crate::operations::TransformOperation;
 
 mod helpers;
 mod memory_file;
@@ -45,29 +46,34 @@ fn main() {
 
     // Avg: 0.6676723153748684
     {
-        let _m = TimeMeasurement::new("average_linear_scan", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time)).unwrap());
+        let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
+        println!("Avg: {}", database.average(Query::new(TimeRange::new(start_time, end_time))).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", database.average(TimeRange::new(start_time, end_time)).unwrap());
+        println!("Avg: {}", database.average(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+    }
+
+    {
+        let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
+        println!("Avg sqrt: {}", database.average(Query::with_transform(TimeRange::new(start_time, end_time), TransformOperation::Sqrt)).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("max", TimeMeasurementUnit::Microseconds);
-        println!("Max: {}", database.max(TimeRange::new(start_time, end_time)).unwrap());
+        println!("Max: {}", database.max(Query::new(TimeRange::new(start_time, end_time))).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
-        println!("95th: {}", database.percentile(TimeRange::new(start_time, end_time), 95).unwrap());
+        println!("95th: {}", database.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);
 
-        let windows = database.average_in_window(TimeRange::new(start_time, end_time), Duration::from_secs_f64(30.0));
+        let windows = database.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
         std::fs::write(
             &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()
