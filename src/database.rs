@@ -6,7 +6,7 @@ use crate::model::{Datapoint, Query, Tags, Time, TIME_SCALE};
 use crate::storage::DatabaseStorage;
 use crate::storage::file::DatabaseStorageFile;
 
-use crate::TimeRange;
+use crate::{TagsFilter, TimeRange};
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
 // pub const DEFAULT_BLOCK_DURATION: f64 = 1.0;
@@ -144,6 +144,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
                     &self.storage,
                     start_time,
                     end_time,
+                    query.tags_filter.clone(),
                     start_block_index
                 )
             )
@@ -156,6 +157,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             &self.storage,
             start_time,
             end_time,
+            query.tags_filter,
             start_block_index,
             |_, datapoint| {
                 streaming_operation.add(datapoint.value as f64);
@@ -206,6 +208,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             &self.storage,
             start_time,
             end_time,
+            query.tags_filter,
             start_block_index,
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
@@ -269,6 +272,7 @@ fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Time) -
 fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Datapoint)>(storage: &TStorage,
                                                                                          start_time: Time,
                                                                                          end_time: Time,
+                                                                                         tags_filter: TagsFilter,
                                                                                          start_block_index: usize,
                                                                                          mut apply: F) {
     for block_index in start_block_index..storage.len() {
@@ -276,20 +280,22 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Dat
         if block_end_time >= start_time {
             let mut outside_time_range = false;
             storage.visit_datapoints(block_index, |tags, datapoints| {
-                let mut iterator = DatapointIterator::new(
-                    start_time,
-                    end_time,
-                    block_start_time,
-                    block_end_time,
-                    datapoints.iter()
-                );
+                if tags_filter.accept(tags) {
+                    let mut iterator = DatapointIterator::new(
+                        start_time,
+                        end_time,
+                        block_start_time,
+                        block_end_time,
+                        datapoints.iter()
+                    );
 
-                for datapoint in &mut iterator {
-                    apply(block_start_time, datapoint);
-                }
+                    for datapoint in &mut iterator {
+                        apply(block_start_time, datapoint);
+                    }
 
-                if iterator.outside_time_range {
-                    outside_time_range = true;
+                    if iterator.outside_time_range {
+                        outside_time_range = true;
+                    }
                 }
             });
 
@@ -303,6 +309,7 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Dat
 fn count_datapoints_in_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
                                                              start_time: Time,
                                                              end_time: Time,
+                                                             tags_filter: TagsFilter,
                                                              start_block_index: usize) -> usize {
     let mut count = 0;
     for block_index in start_block_index..storage.len() {
@@ -310,15 +317,17 @@ fn count_datapoints_in_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
         if block_end_time >= start_time {
             let mut outside_time_range = false;
             storage.visit_datapoints(block_index, |tags, datapoints| {
-                for datapoint in datapoints.iter() {
-                    let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                    if datapoint_time > end_time {
-                        outside_time_range = true;
-                        break;
-                    }
+                if tags_filter.accept(tags) {
+                    for datapoint in datapoints.iter() {
+                        let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                        if datapoint_time > end_time {
+                            outside_time_range = true;
+                            break;
+                        }
 
-                    if datapoint_time >= start_time {
-                        count += 1;
+                        if datapoint_time >= start_time {
+                            count += 1;
+                        }
                     }
                 }
             });

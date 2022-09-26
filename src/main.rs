@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::database::{DefaultDatabase};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use crate::model::{Query, Tags, TimeRange};
+use crate::model::{Query, Tags, TagsFilter, TimeRange};
 use crate::operations::TransformOperation;
 
 mod helpers;
@@ -31,8 +31,8 @@ fn main() {
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            let tags: Tags = 0;
-            // let tags = (index % 2) as Tags;
+            // let tags: Tags = 0;
+            let tags = (index % 2) as Tags;
             database.gauge(data.times[index], data.values[index] as f64, tags);
         }
     }
@@ -57,7 +57,18 @@ fn main() {
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg sqrt: {}", database.average(Query::with_input_transform(TimeRange::new(start_time, end_time), TransformOperation::Sqrt)).unwrap());
+        println!("Avg (tags=1): {}", database.average(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_tags_filter(TagsFilter::And(1))
+        ).unwrap());
+    }
+
+    {
+        let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
+        println!("Avg sqrt: {}", database.average(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_input_transform(TransformOperation::Sqrt)
+        ).unwrap());
     }
 
     {

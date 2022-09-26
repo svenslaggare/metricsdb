@@ -35,8 +35,26 @@ impl TimeRange {
 }
 
 #[derive(Debug, Clone)]
+pub enum TagsFilter {
+    None,
+    And(Tags),
+    Or(Tags)
+}
+
+impl TagsFilter {
+    pub fn accept(&self, tags: Tags) -> bool {
+        match self {
+            TagsFilter::None => true,
+            TagsFilter::And(pattern) => (tags & pattern) == *pattern,
+            TagsFilter::Or(pattern) => (tags & pattern) != 0
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Query {
     pub time_range: TimeRange,
+    pub tags_filter: TagsFilter,
     pub input_transform: Option<TransformOperation>,
     pub output_transform: Option<TransformOperation>
 }
@@ -45,16 +63,75 @@ impl Query {
     pub fn new(time_range: TimeRange) -> Query {
         Query {
             time_range,
+            tags_filter: TagsFilter::None,
             input_transform: None,
             output_transform: None
         }
     }
 
-    pub fn with_input_transform(time_range: TimeRange, transform: TransformOperation) -> Query {
-        Query {
-            time_range,
-            input_transform: Some(transform),
-            output_transform: None
-        }
+    pub fn with_tags_filter(self, tags: TagsFilter) -> Query {
+        let mut new = self;
+        new.tags_filter = tags;
+        new
     }
+
+    pub fn with_input_transform(self, transform: TransformOperation) -> Query {
+        let mut new = self;
+        new.input_transform = Some(transform);
+        new
+    }
+
+    pub fn with_output_transform(self, transform: TransformOperation) -> Query {
+        let mut new = self;
+        new.output_transform = Some(transform);
+        new
+    }
+}
+
+#[test]
+fn test_tags_filter1() {
+    let current_tags = 0;
+    assert_eq!(false, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter2() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter3() {
+    let current_tags = 1 | (1 << 2);
+    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter4() {
+    let current_tags = 1;
+    assert_eq!(false, TagsFilter::And(1 | (1 << 2)).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter5() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter6() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::Or(1 | (1 << 2)).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter7() {
+    let current_tags = 1 | (1 << 2);
+    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter8() {
+    let current_tags = 2;
+    assert_eq!(false, TagsFilter::Or(1).accept(current_tags));
 }
