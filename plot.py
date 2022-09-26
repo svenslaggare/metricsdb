@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 
 
 def main():
-    with open("average_in_window.json", "r") as f:
+    with open("window.json", "r") as f:
         windows = json.load(f)
 
     ts, ys = zip(*windows)

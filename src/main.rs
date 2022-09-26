@@ -69,7 +69,7 @@ fn main() {
 
         let windows = database.average_in_window(TimeRange::new(start_time, end_time), Duration::from_secs_f64(30.0));
         std::fs::write(
-            &Path::new("average_in_window.json"),
+            &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()
         ).unwrap();
     }

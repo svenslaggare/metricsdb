@@ -89,12 +89,10 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
 
                 self.storage.add_datapoint(tags, datapoint);
             } else {
-                self.storage.create_block(time);
-                self.storage.add_datapoint(tags, datapoint);
+                self.storage.create_block_with_datapoint(time, tags, datapoint);
             }
         } else {
-            self.storage.create_block(time);
-            self.storage.add_datapoint(tags, datapoint);
+            self.storage.create_block_with_datapoint(time, tags, datapoint);
         }
     }
 
@@ -171,7 +169,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
                 if let Some(instance) = windows.last_mut() {
-                    if datapoint_time - instance.0 < duration {
+                    if datapoint_time - instance.0 <= duration {
                         instance.1.add(datapoint.value as f64);
                     } else {
                         let mut op = create_op();

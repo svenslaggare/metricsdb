@@ -23,13 +23,6 @@ impl<T: Default> StreamingAverage<T> {
             count: 0
         }
     }
-
-    pub fn with_initial(value: T) -> StreamingAverage<T> {
-        StreamingAverage {
-            sum: value,
-            count: 1
-        }
-    }
 }
 
 impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> StreamingOperation<T> for StreamingAverage<T> {
