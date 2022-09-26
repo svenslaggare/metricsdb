@@ -159,6 +159,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             end_time,
             query.tags_filter,
             start_block_index,
+            false,
             |_, datapoint| {
                 streaming_operation.add(datapoint.value as f64);
             }
@@ -210,6 +211,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             end_time,
             query.tags_filter,
             start_block_index,
+            true,
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
                 let value = datapoint.value as f64;
@@ -274,11 +276,13 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Dat
                                                                                          end_time: Time,
                                                                                          tags_filter: TagsFilter,
                                                                                          start_block_index: usize,
+                                                                                         strict_ordering: bool,
                                                                                          mut apply: F) {
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
             let mut outside_time_range = false;
+            let mut ordered_datapoints = Vec::new();
             storage.visit_datapoints(block_index, |tags, datapoints| {
                 if tags_filter.accept(tags) {
                     let mut iterator = DatapointIterator::new(
@@ -289,8 +293,14 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Dat
                         datapoints.iter()
                     );
 
-                    for datapoint in &mut iterator {
-                        apply(block_start_time, datapoint);
+                    if strict_ordering {
+                        for datapoint in &mut iterator {
+                            ordered_datapoints.push(datapoint.clone());
+                        }
+                    } else {
+                        for datapoint in &mut iterator {
+                            apply(block_start_time, datapoint);
+                        }
                     }
 
                     if iterator.outside_time_range {
@@ -298,6 +308,13 @@ fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Dat
                     }
                 }
             });
+
+            if strict_ordering {
+                ordered_datapoints.sort_by_key(|d| d.time_offset);
+                for datapoint in ordered_datapoints {
+                    apply(block_start_time, &datapoint);
+                }
+            }
 
             if outside_time_range {
                 break;
