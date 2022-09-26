@@ -57,7 +57,7 @@ fn main() {
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg sqrt: {}", database.average(Query::with_transform(TimeRange::new(start_time, end_time), TransformOperation::Sqrt)).unwrap());
+        println!("Avg sqrt: {}", database.average(Query::with_input_transform(TimeRange::new(start_time, end_time), TransformOperation::Sqrt)).unwrap());
     }
 
     {

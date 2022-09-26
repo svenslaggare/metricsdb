@@ -37,21 +37,24 @@ impl TimeRange {
 #[derive(Debug, Clone)]
 pub struct Query {
     pub time_range: TimeRange,
-    pub transform: Option<TransformOperation>
+    pub input_transform: Option<TransformOperation>,
+    pub output_transform: Option<TransformOperation>
 }
 
 impl Query {
     pub fn new(time_range: TimeRange) -> Query {
         Query {
             time_range,
-            transform: None
+            input_transform: None,
+            output_transform: None
         }
     }
 
-    pub fn with_transform(time_range: TimeRange, transform: TransformOperation) -> Query {
+    pub fn with_input_transform(time_range: TimeRange, transform: TransformOperation) -> Query {
         Query {
             time_range,
-            transform: Some(transform)
+            input_transform: Some(transform),
+            output_transform: None
         }
     }
 }

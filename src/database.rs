@@ -97,43 +97,43 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn average(&self, query: Query) -> Option<f64> {
-        match query.transform {
+        match query.input_transform {
             Some(op) => {
-                self.operation(query.time_range, |_| StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op), false)
+                self.operation(query, |_| StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op), false)
             }
             None => {
-                self.operation(query.time_range, |_| StreamingAverage::new(), false)
+                self.operation(query, |_| StreamingAverage::new(), false)
             }
         }
     }
 
     pub fn max(&self, query: Query) -> Option<f64> {
-        match query.transform {
+        match query.input_transform {
             Some(op) => {
-                self.operation(query.time_range, |_| StreamingTransformOperation::<StreamingMax>::from_default(op), false)
+                self.operation(query, |_| StreamingTransformOperation::<StreamingMax>::from_default(op), false)
             }
             None => {
-                self.operation(query.time_range, |_| StreamingMax::new(), false)
+                self.operation(query, |_| StreamingMax::new(), false)
             }
         }
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
-        match query.transform {
+        match query.input_transform {
             Some(op) => {
-                self.operation(query.time_range, |count| StreamingTransformOperation::new(op, StreamingHigherPercentileF64::new(count.unwrap(), percentile)), true)
+                self.operation(query, |count| StreamingTransformOperation::new(op, StreamingHigherPercentileF64::new(count.unwrap(), percentile)), true)
             }
             None => {
-                self.operation(query.time_range, |count| StreamingHigherPercentileF64::new(count.unwrap(), percentile), true)
+                self.operation(query, |count| StreamingHigherPercentileF64::new(count.unwrap(), percentile), true)
             }
         }
     }
 
     fn operation<T: StreamingOperation<f64>, F: Fn(Option<usize>) -> T>(&self,
-                                                                        range: TimeRange,
+                                                                        query: Query,
                                                                         create_op: F,
                                                                         require_count: bool) -> Option<f64> {
-        let (start_time, end_time) = range.int_range();
+        let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
         let start_block_index = find_block_index(&self.storage, start_time)?;
@@ -162,11 +162,14 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             }
         );
 
-        streaming_operation.value()
+        match query.output_transform {
+            Some(operation) => operation.apply(streaming_operation.value()?),
+            None => streaming_operation.value()
+        }
     }
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
-        match query.transform {
+        match query.input_transform {
             Some(op) => {
                 self.operation_in_window(query, duration, || StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op))
             }
@@ -177,7 +180,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
-        match query.transform {
+        match query.input_transform {
             Some(op) => {
                 self.operation_in_window(query, duration, || StreamingTransformOperation::<StreamingMax>::from_default(op))
             }
@@ -223,9 +226,19 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             }
         );
 
+        let transform_output = |value: Option<f64>| {
+            let value = value?;
+
+            match query.output_transform {
+                Some(operation) => operation.apply(value),
+                None => Some(value)
+            }
+        };
+
         windows
             .iter()
-            .map(|(start, operation)| ((start / TIME_SCALE) as f64, operation.value().unwrap()))
+            .map(|(start, operation)| transform_output(operation.value()).map(|value| ((start / TIME_SCALE) as f64, value)))
+            .flatten()
             .collect()
     }
 }
