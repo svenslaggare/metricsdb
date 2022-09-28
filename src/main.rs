@@ -60,7 +60,7 @@ fn main() {
         println!("Avg (tags=1): {}", database.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::And(1))
-        ).unwrap());
+        ).unwrap_or(0.0));
     }
 
     {

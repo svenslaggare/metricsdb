@@ -23,6 +23,7 @@ pub trait DatabaseStorage {
     }
 
     fn visit_datapoints<F: FnMut(Tags, &[Datapoint])>(&self, block_index: usize, apply: F);
+    fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint])> + 'a>>;
 }
 
 pub mod file;

@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::memory_file::MemoryFile;
@@ -190,10 +191,53 @@ impl DatabaseStorage for DatabaseStorageFile {
         unsafe {
             if let Some(block_ptr) = self.block_at_ptr(block_index) {
                 for sub_block in &(*block_ptr).sub_blocks[..(*block_ptr).num_sub_blocks] {
-                    apply(sub_block.tags, sub_block.datapoints(block_ptr));
+                    if sub_block.count > 0 {
+                        apply(sub_block.tags, sub_block.datapoints(block_ptr));
+                    }
                 }
             }
         }
+    }
+
+    fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint])> + 'a>> {
+        let block_ptr = self.block_at_ptr(block_index)?;
+        Some(
+            Box::new(
+                SubBlockIterator {
+                    block_ptr,
+                    _phantom: Default::default(),
+                    sub_block_index: 0,
+                    num_sub_blocks: unsafe { (*block_ptr).num_sub_blocks }
+                }
+            )
+        )
+    }
+}
+
+struct SubBlockIterator<'a> {
+    block_ptr: *const Block,
+    _phantom: PhantomData<&'a Block>,
+    sub_block_index: usize,
+    num_sub_blocks: usize,
+}
+
+impl<'a> Iterator for SubBlockIterator<'a> {
+    type Item = (Tags, &'a [Datapoint]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.sub_block_index < self.num_sub_blocks {
+            let current_index = self.sub_block_index;
+            self.sub_block_index += 1;
+
+            unsafe {
+                let sub_block = &(*self.block_ptr).sub_blocks[current_index];
+                if sub_block.count > 0 {
+                    return Some((sub_block.tags, sub_block.datapoints(self.block_ptr)))
+                }
+            }
+        }
+
+        return None;
     }
 }
 
