@@ -3,9 +3,6 @@ use std::collections::{BinaryHeap};
 
 use float_ord::FloatOrd;
 
-use rand::prelude::SliceRandom;
-use rand::thread_rng;
-
 pub trait StreamingOperation<T> {
     fn add(&mut self, value: T);
     fn value(&self) -> Option<T>;
@@ -314,6 +311,9 @@ fn test_streaming_higher_percentile3() {
 
 #[test]
 fn test_streaming_higher_percentile4() {
+    use rand::prelude::SliceRandom;
+    use rand::thread_rng;
+
     let mut streaming = StreamingHigherPercentile::new(1000, 99);
     let mut values = (1..1001).collect::<Vec<_>>();
     values.shuffle(&mut thread_rng());

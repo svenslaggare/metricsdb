@@ -12,8 +12,10 @@ mod helpers;
 mod memory_file;
 mod storage;
 mod database;
+mod database_operations;
 mod operations;
 mod model;
+mod tags;
 
 #[derive(Deserialize)]
 struct SampleData {
