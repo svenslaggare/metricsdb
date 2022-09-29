@@ -2,3 +2,4 @@
 *.json
 metrics
 .idea
+output.png

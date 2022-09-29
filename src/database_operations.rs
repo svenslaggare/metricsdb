@@ -36,67 +36,6 @@ pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, 
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
             let mut outside_time_range = false;
-            // let mut ordered_datapoints = Vec::new();
-            // storage.visit_datapoints(block_index, |tags, datapoints| {
-            //     if tags_filter.accept(tags) {
-            //         let mut iterator = DatapointIterator::new(
-            //             start_time,
-            //             end_time,
-            //             block_start_time,
-            //             block_end_time,
-            //             datapoints.iter()
-            //         );
-            //
-            //         if strict_ordering {
-            //             for datapoint in &mut iterator {
-            //                 ordered_datapoints.push(datapoint.clone());
-            //             }
-            //         } else {
-            //             for datapoint in &mut iterator {
-            //                 apply(block_start_time, datapoint);
-            //             }
-            //         }
-            //
-            //         if iterator.outside_time_range {
-            //             outside_time_range = true;
-            //         }
-            //     }
-            // });
-            //
-            // if let Some(iterator) = storage.block_datapoints(block_index) {
-            //     for (tags, datapoints) in iterator {
-            //         if tags_filter.accept(tags) {
-            //             let mut iterator = DatapointIterator::new(
-            //                 start_time,
-            //                 end_time,
-            //                 block_start_time,
-            //                 block_end_time,
-            //                 datapoints.iter()
-            //             );
-            //
-            //             if strict_ordering {
-            //                 for datapoint in &mut iterator {
-            //                     ordered_datapoints.push(datapoint.clone());
-            //                 }
-            //             } else {
-            //                 for datapoint in &mut iterator {
-            //                     apply(block_start_time, datapoint);
-            //                 }
-            //             }
-            //
-            //             if iterator.outside_time_range {
-            //                 outside_time_range = true;
-            //             }
-            //         }
-            //     }
-            // }
-            //
-            // if strict_ordering {
-            //     ordered_datapoints.sort_by_key(|d| d.time_offset);
-            //     for datapoint in ordered_datapoints {
-            //         apply(block_start_time, &datapoint);
-            //     }
-            // }
 
             if let Some(iterator) = storage.block_datapoints(block_index) {
                 let mut sub_blocks_iterators = Vec::new();

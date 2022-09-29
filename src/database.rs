@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -211,30 +212,54 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             None => { return Vec::new(); }
         };
 
-        let mut windows = Vec::<(Time, T)>::new();
+        // let mut windows = Vec::<(Time, T)>::new();
+        // database_operations::visit_datapoints_in_time_range(
+        //     &self.storage,
+        //     start_time,
+        //     end_time,
+        //     query.tags_filter,
+        //     start_block_index,
+        //     true,
+        //     |block_start_time, datapoint| {
+        //         let datapoint_time = block_start_time + datapoint.time_offset as Time;
+        //         let value = datapoint.value as f64;
+        //         if let Some(instance) = windows.last_mut() {
+        //             if datapoint_time - instance.0 <= duration {
+        //                 instance.1.add(value);
+        //             } else {
+        //                 let mut op = create_op();
+        //                 op.add(value);
+        //                 windows.push((datapoint_time, op));
+        //             }
+        //         } else {
+        //             let mut op = create_op();
+        //             op.add(value);
+        //             windows.push((datapoint_time, op));
+        //         }
+        //     }
+        // );
+
+        let mut window_start = start_time / duration;
+        let num_windows = (end_time / duration) - window_start;
+        let mut windows = (0..num_windows).map(|_| None).collect::<Vec<_>>();
+
+        let get_timestamp = |window_index: usize| {
+            (((window_index as u64 + window_start) * duration) / TIME_SCALE) as f64
+        };
+
         database_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
             end_time,
             query.tags_filter,
             start_block_index,
-            true,
+            false,
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
                 let value = datapoint.value as f64;
-                if let Some(instance) = windows.last_mut() {
-                    if datapoint_time - instance.0 <= duration {
-                        instance.1.add(value);
-                    } else {
-                        let mut op = create_op();
-                        op.add(value);
-                        windows.push((datapoint_time, op));
-                    }
-                } else {
-                    let mut op = create_op();
-                    op.add(value);
-                    windows.push((datapoint_time, op));
-                }
+                windows[((datapoint_time / duration) - window_start) as usize]
+                    .get_or_insert_with(|| create_op())
+                    .add(value);
             }
         );
 
@@ -249,7 +274,10 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
 
         windows
             .iter()
-            .map(|(start, operation)| transform_output(operation.value()).map(|value| ((start / TIME_SCALE) as f64, value)))
+            // .map(|(start, operation)| transform_output(operation.value()).map(|value| ((start / TIME_SCALE) as f64, value)))
+            .filter(|operation| operation.is_some())
+            .enumerate()
+            .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (get_timestamp(start), value)))
             .flatten()
             .collect()
     }

@@ -75,6 +75,97 @@ impl Default for StreamingMax {
     }
 }
 
+pub struct StreamingHistogram {
+    buckets: Vec<usize>,
+    total_count: usize,
+    min: f64,
+    max: f64
+}
+
+impl StreamingHistogram {
+    pub fn new(min: f64, max: f64, num_buckets: usize) -> StreamingHistogram {
+        StreamingHistogram {
+            buckets: vec![0; num_buckets],
+            total_count: 0,
+            min,
+            max
+        }
+    }
+
+    pub fn prints(&self) {
+        println!("Histogram:");
+        for (bucket_index, count) in self.buckets.iter().enumerate() {
+            println!("\t[{:.2}, {:.2}): {}", self.edge_from_index(bucket_index), self.edge_from_index(bucket_index + 1), count);
+        }
+        println!();
+    }
+
+    pub fn percentile(&self, percentile: i32) -> Option<f64> {
+        let percentile = percentile as f64 / 100.0;
+        let required_count = (percentile * self.total_count as f64).round() as usize;
+
+        let mut accumulated_count = 0;
+        for (bucket_index, count) in self.buckets.iter().enumerate() {
+            accumulated_count += count;
+
+            if accumulated_count >= required_count {
+                let interpolation = (required_count - (accumulated_count - count)) as f64 / *count as f64;
+                return Some(self.edge_from_float_index(bucket_index as f64 + interpolation));
+            }
+        }
+
+        None
+    }
+
+    fn edge_from_index(&self, index: usize) -> f64 {
+        self.min + (index as f64 / (self.buckets.len()) as f64) * (self.max - self.min)
+    }
+
+    fn edge_from_float_index(&self, index: f64) -> f64 {
+        self.min + (index / (self.buckets.len()) as f64) * (self.max - self.min)
+    }
+}
+
+impl StreamingOperation<f64> for StreamingHistogram {
+    fn add(&mut self, value: f64) {
+        let bucket_float = (value - self.min) / (self.max - self.min);
+        let bucket_index = (bucket_float * (self.buckets.len() - 0) as f64).floor() as usize;
+
+        if bucket_index < self.buckets.len() {
+            self.total_count += 1;
+            self.buckets[bucket_index] += 1;
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        None
+    }
+}
+
+pub struct StreamingApproxPercentile {
+    histogram: StreamingHistogram,
+    percentile: i32
+}
+
+impl StreamingApproxPercentile {
+    pub fn new(min: f64, max: f64, num_buckets: usize, percentile: i32) -> StreamingApproxPercentile {
+        StreamingApproxPercentile {
+            histogram: StreamingHistogram::new(min, max, num_buckets),
+            percentile
+        }
+    }
+}
+
+impl StreamingOperation<f64> for StreamingApproxPercentile {
+    fn add(&mut self, value: f64) {
+        self.histogram.add(value);
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.histogram.percentile(self.percentile)
+    }
+}
+
 pub struct StreamingHigherPercentile<T: Ord + Clone> {
     percentile_count: usize,
     values: BinaryHeap<Entry<T>>
@@ -381,4 +472,57 @@ fn test_streaming_lower_percentile2() {
     println!("{:?}", streaming.value());
 
     assert_eq!(Some(FloatOrd(134.0)), streaming.value());
+}
+
+#[test]
+fn test_streaming_histogram1() {
+    let mut streaming = StreamingHistogram::new(1.0, 1001.0, 50);
+    let values = (1..1001).collect::<Vec<_>>();
+    for value in values {
+        streaming.add(value as f64);
+    }
+
+    assert_eq!(Some(991.0), streaming.percentile(99));
+}
+
+#[test]
+fn test_streaming_histogram2() {
+    use rand::prelude::SliceRandom;
+    use rand::thread_rng;
+
+    let mut streaming = StreamingHistogram::new(1.0, 1001.0, 50);
+    let mut values = (1..1001).collect::<Vec<_>>();
+    values.shuffle(&mut thread_rng());
+    for value in values {
+        streaming.add(value as f64);
+    }
+
+    assert_eq!(Some(991.0), streaming.percentile(99));
+}
+
+#[test]
+fn test_streaming_histogram3() {
+    let mut streaming = StreamingHistogram::new(1.0, 1001.0, 50);
+    let values = (1..1001).collect::<Vec<_>>();
+    for value in values {
+        streaming.add(value as f64);
+        streaming.add(value as f64);
+    }
+
+    assert_eq!(Some(991.0), streaming.percentile(99));
+}
+
+#[test]
+fn test_streaming_approx_percentile1() {
+    use rand::prelude::SliceRandom;
+    use rand::thread_rng;
+
+    let mut streaming = StreamingApproxPercentile::new(1.0, 1001.0, 50, 99);
+    let mut values = (1..1001).collect::<Vec<_>>();
+    values.shuffle(&mut thread_rng());
+    for value in values {
+        streaming.add(value as f64);
+    }
+
+    assert_eq!(Some(991.0), streaming.value());
 }
