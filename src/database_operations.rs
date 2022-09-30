@@ -132,41 +132,6 @@ pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &
     }
 }
 
-pub fn count_datapoints_in_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
-                                                                 start_time: Time,
-                                                                 end_time: Time,
-                                                                 tags_filter: TagsFilter,
-                                                                 start_block_index: usize) -> usize {
-    let mut count = 0;
-    for block_index in start_block_index..storage.len() {
-        let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
-        if block_end_time >= start_time {
-            let mut outside_time_range = false;
-            storage.visit_datapoints(block_index, |tags, datapoints| {
-                if tags_filter.accept(tags) {
-                    for datapoint in datapoints.iter() {
-                        let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                        if datapoint_time > end_time {
-                            outside_time_range = true;
-                            break;
-                        }
-
-                        if datapoint_time >= start_time {
-                            count += 1;
-                        }
-                    }
-                }
-            });
-
-            if outside_time_range {
-                break;
-            }
-        }
-    }
-
-    count
-}
-
 struct DatapointIterator<'a, T: Iterator<Item=&'a Datapoint>> {
     start_time: Time,
     end_time: Time,
