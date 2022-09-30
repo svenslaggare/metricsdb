@@ -13,33 +13,25 @@ impl TagsIndex {
         }
     }
 
-    pub fn try_add(&mut self, tag: String) -> Option<Tags> {
-        if let Some(pattern) = self.mapping.get(&tag) {
+    pub fn try_add(&mut self, tag: &str) -> Option<Tags> {
+        if let Some(pattern) = self.mapping.get(tag) {
             return Some(*pattern);
         } else if self.mapping.len() < 64 {
             let pattern = 1 << self.mapping.len();
-            self.mapping.insert(tag, pattern);
+            self.mapping.insert(tag.to_owned(), pattern);
             Some(pattern)
         } else {
             None
         }
     }
 
-    pub fn tags_pattern(&self, tags: &[String]) -> Option<Tags> {
+    pub fn tags_pattern(&self, tags: &[&str]) -> Option<Tags> {
         let mut pattern = 0;
         for tag in tags {
-            pattern |= self.mapping.get(tag)?;
+            pattern |= self.mapping.get(*tag)?;
         }
 
         Some(pattern)
-    }
-
-    pub fn and_filter(&self, tags: &[String]) -> Option<TagsFilter> {
-        Some(TagsFilter::And(self.tags_pattern(tags)?))
-    }
-
-    pub fn or_filter(&self, tags: &[String]) -> Option<TagsFilter> {
-        Some(TagsFilter::Or(self.tags_pattern(tags)?))
     }
 }
 
@@ -47,38 +39,38 @@ impl TagsIndex {
 fn test_try_add1() {
     let mut index = TagsIndex::new();
     for number in 1..65 {
-        assert_eq!(true, index.try_add(format!("tag:T{}", number)).is_some());
-        assert_eq!(true, index.try_add(format!("tag:T{}", number)).is_some());
+        assert_eq!(true, index.try_add(&format!("tag:T{}", number)).is_some());
+        assert_eq!(true, index.try_add(&format!("tag:T{}", number)).is_some());
     }
 
-    assert_eq!(true, index.try_add(format!("tag:T{}", 33)).is_some());
-    assert_eq!(true, index.try_add(format!("tag:T{}", 65)).is_none());
+    assert_eq!(true, index.try_add(&format!("tag:T{}", 33)).is_some());
+    assert_eq!(true, index.try_add(&format!("tag:T{}", 65)).is_none());
 }
 
 #[test]
 fn test_and_filter1() {
     let mut index = TagsIndex::new();
-    index.try_add("tag:T1".to_string()).unwrap();
-    index.try_add("tag:T2".to_string()).unwrap();
+    index.try_add(&"tag:T1".to_string()).unwrap();
+    index.try_add(&"tag:T2".to_string()).unwrap();
 
-    assert_eq!(Some(TagsFilter::And(1)), index.and_filter(&["tag:T1".to_owned()]));
-    assert_eq!(Some(TagsFilter::And(1 | 2)), index.and_filter(&["tag:T1".to_owned(), "tag:T2".to_owned()]));
+    assert_eq!(Some(TagsFilter::And(1)), index.tags_pattern(&["tag:T1"]).map(|pattern| TagsFilter::And(pattern)));
+    assert_eq!(Some(TagsFilter::And(1 | 2)), index.tags_pattern(&["tag:T1", "tag:T2"]).map(|pattern| TagsFilter::And(pattern)));
 }
 
 #[test]
 fn test_and_filter2() {
     let mut index = TagsIndex::new();
-    index.try_add("tag:T1".to_string()).unwrap();
-    index.try_add("tag:T2".to_string()).unwrap();
+    index.try_add(&"tag:T1".to_string()).unwrap();
+    index.try_add(&"tag:T2".to_string()).unwrap();
 
-    assert_eq!(None, index.and_filter(&["tag:T3".to_owned(), "tag:T1".to_owned()]));
+    assert_eq!(None, index.tags_pattern(&["tag:T3", "tag:T1"]).map(|pattern| TagsFilter::And(pattern)));
 }
 
 #[test]
 fn test_or_filter1() {
     let mut index = TagsIndex::new();
-    index.try_add("tag:T1".to_string()).unwrap();
-    index.try_add("tag:T2".to_string()).unwrap();
+    index.try_add(&"tag:T1".to_string()).unwrap();
+    index.try_add(&"tag:T2".to_string()).unwrap();
 
-    assert_eq!(Some(TagsFilter::Or(1 | 2)), index.or_filter(&["tag:T1".to_owned(), "tag:T2".to_owned()]));
+    assert_eq!(Some(TagsFilter::Or(1 | 2)), index.tags_pattern(&["tag:T1", "tag:T2"]).map(|pattern| TagsFilter::Or(pattern)));
 }

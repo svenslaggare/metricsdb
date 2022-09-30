@@ -30,11 +30,13 @@ fn main() {
     println!("n: {}", data.times.len());
 
     let mut database = DefaultDatabase::new(Path::new("metrics"));
+    let tags_list = vec!["tag:T1", "tag:T2"];
+
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags: Tags = 0;
-            let tags = (index % 2) as Tags;
+            // let tags = &[&tags_list[0]];
+            let tags = &[tags_list[(index % 2)]];
             database.gauge(data.times[index], data.values[index] as f64, tags);
         }
     }
@@ -61,7 +63,7 @@ fn main() {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
         println!("Avg (tags=1): {}", database.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::And(1))
+                .with_tags_filter(TagsFilter::And(database.tags_pattern(&[&tags_list[0]]).unwrap()))
         ).unwrap_or(0.0));
     }
 
