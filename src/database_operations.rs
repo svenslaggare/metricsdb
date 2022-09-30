@@ -95,6 +95,43 @@ pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, 
     }
 }
 
+pub struct TimeRangeStatistics {
+    pub count: usize,
+    pub min: f64,
+    pub max: f64
+}
+
+pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
+                                                                      start_time: Time,
+                                                                      end_time: Time,
+                                                                      tags_filter: TagsFilter,
+                                                                      start_block_index: usize) -> TimeRangeStatistics {
+    let mut count = 0;
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+
+    visit_datapoints_in_time_range(
+        storage,
+        start_time,
+        end_time,
+        tags_filter,
+        start_block_index,
+        false,
+        |_, datapoint| {
+            count += 1;
+            let value = datapoint.value as f64;
+            min = min.min(value);
+            max = max.max(value);
+        }
+    );
+
+    TimeRangeStatistics {
+        count,
+        min,
+        max
+    }
+}
+
 pub fn count_datapoints_in_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
                                                                  start_time: Time,
                                                                  end_time: Time,

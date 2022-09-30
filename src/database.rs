@@ -1,13 +1,12 @@
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-
-use crate::operations::{StreamingAverage, StreamingHigherPercentileF64, StreamingMax, StreamingOperation, StreamingTransformOperation};
+use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
 use crate::model::{Datapoint, Query, Tags, Time, TIME_SCALE};
 use crate::storage::DatabaseStorage;
 use crate::storage::file::DatabaseStorageFile;
 use crate::database_operations;
+use crate::database_operations::TimeRangeStatistics;
 use crate::tags::TagsIndex;
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
@@ -124,28 +123,32 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
+        let create = |stats: TimeRangeStatistics, percentile: i32| {
+            StreamingApproxPercentile::new(stats.min, stats.max, (stats.count as f64).sqrt().ceil() as usize, percentile)
+        };
+
         match query.input_transform {
             Some(op) => {
-                self.operation(query, |count| StreamingTransformOperation::new(op, StreamingHigherPercentileF64::new(count.unwrap(), percentile)), true)
+                self.operation(query, |stats| StreamingTransformOperation::new(op, create(stats.unwrap(), percentile)), true)
             }
             None => {
-                self.operation(query, |count| StreamingHigherPercentileF64::new(count.unwrap(), percentile), true)
+                self.operation(query, |stats| create(stats.unwrap(), percentile), true)
             }
         }
     }
 
-    fn operation<T: StreamingOperation<f64>, F: Fn(Option<usize>) -> T>(&self,
-                                                                        query: Query,
-                                                                        create_op: F,
-                                                                        require_count: bool) -> Option<f64> {
+    fn operation<T: StreamingOperation<f64>, F: Fn(Option<TimeRangeStatistics>) -> T>(&self,
+                                                                                      query: Query,
+                                                                                      create_op: F,
+                                                                                      require_statistics: bool) -> Option<f64> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
         let start_block_index = database_operations::find_block_index(&self.storage, start_time)?;
 
-        let count = if require_count {
+        let stats = if require_statistics {
             Some(
-                database_operations::count_datapoints_in_time_range(
+                database_operations::determine_statistics_for_time_range(
                     &self.storage,
                     start_time,
                     end_time,
@@ -157,7 +160,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             None
         };
 
-        let mut streaming_operation = create_op(count);
+        let mut streaming_operation = create_op(stats);
         database_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
@@ -212,7 +215,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             None => { return Vec::new(); }
         };
 
-        let mut window_start = start_time / duration;
+        let window_start = start_time / duration;
         let num_windows = (end_time / duration) - window_start;
         let mut windows = (0..num_windows).map(|_| None).collect::<Vec<_>>();
 
