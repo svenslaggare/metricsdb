@@ -101,14 +101,30 @@ pub struct TimeRangeStatistics {
     pub max: f64
 }
 
+impl TimeRangeStatistics {
+    pub fn handle(&mut self, value: f64) {
+        self.count += 1;
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+    }
+}
+
+impl Default for TimeRangeStatistics {
+    fn default() -> Self {
+        TimeRangeStatistics {
+            count: 0,
+            min: f64::INFINITY,
+            max: f64::NEG_INFINITY
+        }
+    }
+}
+
 pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
                                                                       start_time: Time,
                                                                       end_time: Time,
                                                                       tags_filter: TagsFilter,
                                                                       start_block_index: usize) -> TimeRangeStatistics {
-    let mut count = 0;
-    let mut min = f64::INFINITY;
-    let mut max = f64::NEG_INFINITY;
+    let mut stats = TimeRangeStatistics::default();
 
     visit_datapoints_in_time_range(
         storage,
@@ -118,18 +134,11 @@ pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &
         start_block_index,
         false,
         |_, datapoint| {
-            count += 1;
-            let value = datapoint.value as f64;
-            min = min.min(value);
-            max = max.max(value);
+            stats.handle(datapoint.value as f64);
         }
     );
 
-    TimeRangeStatistics {
-        count,
-        min,
-        max
-    }
+    stats
 }
 
 struct DatapointIterator<'a, T: Iterator<Item=&'a Datapoint>> {

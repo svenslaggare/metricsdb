@@ -136,7 +136,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
-        let create = |stats: TimeRangeStatistics, percentile: i32| {
+        let create = |stats: &TimeRangeStatistics, percentile: i32| {
             StreamingApproxPercentile::new(stats.min, stats.max, (stats.count as f64).sqrt().ceil() as usize, percentile)
         };
 
@@ -150,10 +150,10 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }
     }
 
-    fn operation<T: StreamingOperation<f64>, F: Fn(Option<TimeRangeStatistics>) -> T>(&self,
-                                                                                      query: Query,
-                                                                                      create_op: F,
-                                                                                      require_statistics: bool) -> Option<f64> {
+    fn operation<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics>) -> T>(&self,
+                                                                                       query: Query,
+                                                                                       create_op: F,
+                                                                                       require_statistics: bool) -> Option<f64> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -173,7 +173,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             None
         };
 
-        let mut streaming_operation = create_op(stats);
+        let mut streaming_operation = create_op(stats.as_ref());
         database_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
@@ -195,10 +195,10 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
         match query.input_transform {
             Some(op) => {
-                self.operation_in_window(query, duration, || StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op))
+                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op), false)
             }
             None => {
-                self.operation_in_window(query, duration, || StreamingAverage::new())
+                self.operation_in_window(query, duration, |_| StreamingAverage::new(), false)
             }
         }
     }
@@ -206,18 +206,34 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
         match query.input_transform {
             Some(op) => {
-                self.operation_in_window(query, duration, || StreamingTransformOperation::<StreamingMax>::from_default(op))
+                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingMax>::from_default(op), false)
             }
             None => {
-                self.operation_in_window(query, duration, || StreamingMax::new())
+                self.operation_in_window(query, duration, |_| StreamingMax::new(), false)
             }
         }
     }
 
-    fn operation_in_window<T: StreamingOperation<f64>, F: Fn() -> T>(&self,
-                                                                     query: Query,
-                                                                     duration: Duration,
-                                                                     create_op: F) -> Vec<(f64, f64)> {
+    pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> Vec<(f64, f64)> {
+        let create = |stats: &TimeRangeStatistics, percentile: i32| {
+            StreamingApproxPercentile::new(stats.min, stats.max, (stats.count as f64).sqrt().ceil() as usize, percentile)
+        };
+
+        match query.input_transform {
+            Some(op) => {
+                self.operation_in_window(query, duration, |stats| StreamingTransformOperation::new(op, create(stats.unwrap(), percentile)), true)
+            }
+            None => {
+                self.operation_in_window(query, duration, |stats| create(stats.unwrap(), percentile), true)
+            }
+        }
+    }
+
+    fn operation_in_window<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics>) -> T>(&self,
+                                                                                                 query: Query,
+                                                                                                 duration: Duration,
+                                                                                                 create_op: F,
+                                                                                                 require_statistics: bool) -> Vec<(f64, f64)> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -236,6 +252,33 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             (((window_index as u64 + window_start) * duration) / TIME_SCALE) as f64
         };
 
+        let get_window_index = |time: Time| {
+            ((time / duration) - window_start) as usize
+        };
+
+        let mut window_stats = if require_statistics {
+            let mut window_stats = (0..num_windows).map(|_| None).collect::<Vec<_>>();
+
+            database_operations::visit_datapoints_in_time_range(
+                &self.storage,
+                start_time,
+                end_time,
+                query.tags_filter,
+                start_block_index,
+                false,
+                |block_start_time, datapoint| {
+                    let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                    window_stats[get_window_index(datapoint_time)]
+                        .get_or_insert_with(|| TimeRangeStatistics::default())
+                        .handle(datapoint.value as f64);
+                }
+            );
+
+            Some(window_stats)
+        } else {
+            None
+        };
+
         database_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
@@ -245,10 +288,16 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             false,
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                let value = datapoint.value as f64;
-                windows[((datapoint_time / duration) - window_start) as usize]
-                    .get_or_insert_with(|| create_op())
-                    .add(value);
+                let window_index = get_window_index(datapoint_time);
+                windows[window_index]
+                    .get_or_insert_with(|| {
+                        if require_statistics {
+                            create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
+                        } else {
+                            create_op(None)
+                        }
+                    })
+                    .add(datapoint.value as f64);
             }
         );
 

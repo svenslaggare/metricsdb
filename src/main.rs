@@ -89,6 +89,7 @@ fn main() {
         let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);
 
         let windows = database.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
+        // let windows = database.percentile_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0), 95);
         std::fs::write(
             &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()

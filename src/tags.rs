@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Tags, TagsFilter};
+use crate::{Tags};
 
 pub struct TagsIndex {
     mapping: HashMap<String, Tags>
