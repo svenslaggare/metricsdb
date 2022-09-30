@@ -1,6 +1,8 @@
 pub trait StreamingOperation<T> {
     fn add(&mut self, value: T);
     fn value(&self) -> Option<T>;
+
+    fn merge(&mut self, other: Self);
 }
 
 pub struct StreamingAverage<T> {
@@ -29,6 +31,11 @@ impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> 
         } else {
             None
         }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.sum += other.sum;
+        self.count += other.count;
     }
 }
 
@@ -61,6 +68,12 @@ impl StreamingOperation<f64> for StreamingMax {
 
     fn value(&self) -> Option<f64> {
         self.max
+    }
+
+    fn merge(&mut self, other: Self) {
+        if let Some(value) = other.max {
+            self.add(value);
+        }
     }
 }
 
@@ -135,6 +148,16 @@ impl StreamingOperation<f64> for StreamingHistogram {
     fn value(&self) -> Option<f64> {
         None
     }
+
+    fn merge(&mut self, other: Self) {
+        assert_eq!(self.min, other.min);
+        assert_eq!(self.max, other.max);
+        assert_eq!(self.buckets.len(), other.buckets.len());
+
+        for (bucket_index, count) in other.buckets.iter().enumerate() {
+            self.buckets[bucket_index] += count;
+        }
+    }
 }
 
 pub struct StreamingApproxPercentile {
@@ -159,9 +182,14 @@ impl StreamingOperation<f64> for StreamingApproxPercentile {
     fn value(&self) -> Option<f64> {
         self.histogram.percentile(self.percentile)
     }
+
+    fn merge(&mut self, other: Self) {
+        assert_eq!(self.percentile, other.percentile);
+        self.histogram.merge(other.histogram);
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TransformOperation {
     Abs,
     Max(f64),
@@ -235,6 +263,11 @@ impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformO
 
     fn value(&self) -> Option<f64> {
         self.inner.value()
+    }
+
+    fn merge(&mut self, other: Self) {
+        assert_eq!(self.operation, other.operation);
+        self.inner.merge(other.inner);
     }
 }
 
