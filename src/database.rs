@@ -212,33 +212,6 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             None => { return Vec::new(); }
         };
 
-        // let mut windows = Vec::<(Time, T)>::new();
-        // database_operations::visit_datapoints_in_time_range(
-        //     &self.storage,
-        //     start_time,
-        //     end_time,
-        //     query.tags_filter,
-        //     start_block_index,
-        //     true,
-        //     |block_start_time, datapoint| {
-        //         let datapoint_time = block_start_time + datapoint.time_offset as Time;
-        //         let value = datapoint.value as f64;
-        //         if let Some(instance) = windows.last_mut() {
-        //             if datapoint_time - instance.0 <= duration {
-        //                 instance.1.add(value);
-        //             } else {
-        //                 let mut op = create_op();
-        //                 op.add(value);
-        //                 windows.push((datapoint_time, op));
-        //             }
-        //         } else {
-        //             let mut op = create_op();
-        //             op.add(value);
-        //             windows.push((datapoint_time, op));
-        //         }
-        //     }
-        // );
-
         let mut window_start = start_time / duration;
         let num_windows = (end_time / duration) - window_start;
         let mut windows = (0..num_windows).map(|_| None).collect::<Vec<_>>();
@@ -274,7 +247,6 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
 
         windows
             .iter()
-            // .map(|(start, operation)| transform_output(operation.value()).map(|value| ((start / TIME_SCALE) as f64, value)))
             .filter(|operation| operation.is_some())
             .enumerate()
             .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (get_timestamp(start), value)))
