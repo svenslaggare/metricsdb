@@ -5,8 +5,9 @@ use serde::Deserialize;
 
 use crate::database::{DefaultDatabase};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use crate::model::{Query, Tags, TagsFilter, TimeRange};
+use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
+use crate::tags::TagsFilter;
 
 mod helpers;
 mod memory_file;

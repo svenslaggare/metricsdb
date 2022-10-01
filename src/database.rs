@@ -114,23 +114,20 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn average(&self, query: Query) -> Option<f64> {
-        match query.input_transform {
-            Some(op) => {
-                self.operation(query, |_| StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op), false)
-            }
-            None => {
-                self.operation(query, |_| StreamingAverage::new(), false)
-            }
-        }
+        self.simple_operation::<StreamingAverage<f64>>(query)
     }
 
     pub fn max(&self, query: Query) -> Option<f64> {
+        self.simple_operation::<StreamingMax>(query)
+    }
+
+    fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> Option<f64> {
         match query.input_transform {
             Some(op) => {
-                self.operation(query, |_| StreamingTransformOperation::<StreamingMax>::from_default(op), false)
+                self.operation(query, |_| StreamingTransformOperation::<T>::from_default(op), false)
             }
             None => {
-                self.operation(query, |_| StreamingMax::new(), false)
+                self.operation(query, |_| T::default(), false)
             }
         }
     }

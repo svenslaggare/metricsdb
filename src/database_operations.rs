@@ -1,6 +1,6 @@
 use crate::model::{Datapoint, Time};
 use crate::storage::DatabaseStorage;
-use crate::TagsFilter;
+use crate::tags::TagsFilter;
 
 pub fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {

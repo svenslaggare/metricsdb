@@ -35,6 +35,23 @@ impl TagsIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagsFilter {
+    None,
+    And(Tags),
+    Or(Tags)
+}
+
+impl TagsFilter {
+    pub fn accept(&self, tags: Tags) -> bool {
+        match self {
+            TagsFilter::None => true,
+            TagsFilter::And(pattern) => (tags & pattern) == *pattern,
+            TagsFilter::Or(pattern) => (tags & pattern) != 0
+        }
+    }
+}
+
 #[test]
 fn test_try_add1() {
     let mut index = TagsIndex::new();

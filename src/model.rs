@@ -1,3 +1,4 @@
+use crate::tags::TagsFilter;
 use crate::TransformOperation;
 
 pub type Time = u64;
@@ -31,23 +32,6 @@ impl TimeRange {
             (self.start * TIME_SCALE as f64).round() as Time,
             (self.end * TIME_SCALE as f64).round() as Time
         )
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TagsFilter {
-    None,
-    And(Tags),
-    Or(Tags)
-}
-
-impl TagsFilter {
-    pub fn accept(&self, tags: Tags) -> bool {
-        match self {
-            TagsFilter::None => true,
-            TagsFilter::And(pattern) => (tags & pattern) == *pattern,
-            TagsFilter::Or(pattern) => (tags & pattern) != 0
-        }
     }
 }
 
