@@ -19,6 +19,8 @@ pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 
 pub type DefaultMetric = Metric<MetricStorageFile<f32>>;
 
+pub type MetricResult<T> = Result<T, MetricError>;
+
 pub struct Metric<TStorage: MetricStorage<f32>> {
     block_duration: u64,
     datapoint_duration: u64,
@@ -69,8 +71,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         self.tags_index.tags_pattern(tags)
     }
 
-    pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) {
-        let tags = self.try_add_tags(tags).unwrap();
+    pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
+        let tags = self.try_add_tags(tags).ok_or_else(|| MetricError::ExceededSecondaryTags)?;
 
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = value as f32;
@@ -95,7 +97,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
                 if let Some(last_datapoint) = last_datapoint {
                     if (time - (block_start_time + last_datapoint.time_offset as u64)) < self.datapoint_duration {
                         last_datapoint.value = value;
-                        return;
+                        return Ok(());
                     }
                 }
 
@@ -106,6 +108,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         } else {
             self.storage.create_block_with_datapoint(time, tags, datapoint);
         }
+
+        Ok(())
     }
 
     fn try_add_tags(&mut self, tags: &[&str]) -> Option<Tags> {
@@ -317,4 +321,9 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             .flatten()
             .collect()
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum MetricError {
+    ExceededSecondaryTags
 }

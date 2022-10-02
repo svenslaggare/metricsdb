@@ -38,7 +38,7 @@ fn main() {
         for index in 0..data.times.len() {
             // let tags = &[&tags_list[0]];
             let tags = &[tags_list[(index % 2)]];
-            metric.gauge(data.times[index], data.values[index] as f64, tags);
+            metric.gauge(data.times[index], data.values[index] as f64, tags).unwrap();
         }
     }
 
