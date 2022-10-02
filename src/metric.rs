@@ -205,23 +205,27 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     }
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+        type Op = StreamingAverage<f64>;
+
         match query.input_transform {
             Some(op) => {
-                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingAverage<f64>>::from_default(op), false)
+                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<Op>::from_default(op), false)
             }
             None => {
-                self.operation_in_window(query, duration, |_| StreamingAverage::new(), false)
+                self.operation_in_window(query, duration, |_| Op::new(), false)
             }
         }
     }
 
     pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+        type Op = StreamingMax<f64>;
+
         match query.input_transform {
             Some(op) => {
-                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingMax::<f64>>::from_default(op), false)
+                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<Op>::from_default(op), false)
             }
             None => {
-                self.operation_in_window(query, duration, |_| StreamingMax::new(), false)
+                self.operation_in_window(query, duration, |_| Op::new(), false)
             }
         }
     }
