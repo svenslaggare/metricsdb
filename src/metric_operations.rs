@@ -1,4 +1,5 @@
 use crate::model::{Datapoint, MinMax, Time, TIME_SCALE};
+use crate::operations::StreamingOperation;
 use crate::storage::MetricStorage;
 use crate::tags::TagsFilter;
 
@@ -230,7 +231,7 @@ impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> Iterator for DatapointIter
 }
 
 pub struct MetricWindowing<T> {
-    pub windows: Vec<Option<T>>,
+    windows: Vec<Option<T>>,
     duration: u64,
     window_start: Time
 }
@@ -251,6 +252,10 @@ impl<T> MetricWindowing<T> {
         self.windows.len()
     }
 
+    pub fn get(&mut self, index: usize) -> &mut Option<T> {
+        &mut self.windows[index]
+    }
+
     pub fn get_timestamp(&self, window_index: usize) -> f64 {
         (((window_index as u64 + self.window_start) * self.duration) / TIME_SCALE) as f64
     }
@@ -262,6 +267,16 @@ impl<T> MetricWindowing<T> {
     pub fn create_windows<U, F: Fn() -> U>(&self, f: F) -> Vec<U> {
         (0..self.len()).map(|_| f()).collect::<Vec<_>>()
     }
+}
+
+pub fn extract_operations_in_windows<T: StreamingOperation<E>, F: Fn(Option<E>) -> Option<E>, E>(windowing: MetricWindowing<T>, transform_output: F) -> Vec<(f64, E)> {
+    windowing.windows
+        .iter()
+        .filter(|operation| operation.is_some())
+        .enumerate()
+        .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (windowing.get_timestamp(start), value)))
+        .flatten()
+        .collect()
 }
 
 #[test]

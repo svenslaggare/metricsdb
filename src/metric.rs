@@ -276,7 +276,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
                 let window_index = windowing.get_window_index(datapoint_time);
-                windowing.windows[window_index]
+                windowing.get(window_index)
                     .get_or_insert_with(|| {
                         if require_statistics {
                             create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
@@ -288,22 +288,17 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             }
         );
 
-        let transform_output = |value: Option<f64>| {
-            let value = value?;
+        metric_operations::extract_operations_in_windows(
+            windowing,
+            |value| {
+                let value = value?;
 
-            match query.output_transform {
-                Some(operation) => operation.apply(value),
-                None => Some(value)
+                match query.output_transform {
+                    Some(operation) => operation.apply(value),
+                    None => Some(value)
+                }
             }
-        };
-
-        windowing.windows
-            .iter()
-            .filter(|operation| operation.is_some())
-            .enumerate()
-            .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (windowing.get_timestamp(start), value)))
-            .flatten()
-            .collect()
+        )
     }
 }
 
