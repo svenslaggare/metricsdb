@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::model::{Datapoint, Tags, Time};
 
-pub trait DatabaseStorage<E: Copy> {
+pub trait MetricStorage<E: Copy> {
     fn new(base_path: &Path) -> Self;
     fn from_existing(base_path: &Path) -> Self;
 

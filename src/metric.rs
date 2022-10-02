@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
 use crate::model::{Datapoint, Query, Tags, Time, TIME_SCALE};
-use crate::storage::DatabaseStorage;
-use crate::storage::file::DatabaseStorageFile;
-use crate::database_operations;
-use crate::database_operations::TimeRangeStatistics;
+use crate::storage::MetricStorage;
+use crate::storage::file::MetricStorageFile;
+use crate::metric_operations;
+use crate::metric_operations::TimeRangeStatistics;
 use crate::tags::TagsIndex;
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
@@ -17,22 +17,22 @@ pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 // pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.5;
 
-pub type DefaultDatabase = Database<DatabaseStorageFile<f32>>;
+pub type DefaultMetric = Metric<MetricStorageFile<f32>>;
 
-pub struct Database<TStorage: DatabaseStorage<f32>> {
+pub struct Metric<TStorage: MetricStorage<f32>> {
     block_duration: u64,
     datapoint_duration: u64,
     storage: TStorage,
     tags_index: TagsIndex
 }
 
-impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
-    pub fn new(base_path: &Path) -> Database<TStorage> {
+impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
+    pub fn new(base_path: &Path) -> Metric<TStorage> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).unwrap();
         }
 
-        Database {
+        Metric {
             block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
             datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
             storage: TStorage::new(base_path),
@@ -40,8 +40,8 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
         }
     }
 
-    pub fn from_existing(base_path: &Path) -> Database<TStorage> {
-        Database {
+    pub fn from_existing(base_path: &Path) -> Metric<TStorage> {
+        Metric {
             block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
             datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
             storage: TStorage::from_existing(base_path),
@@ -156,11 +156,11 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
-        let start_block_index = database_operations::find_block_index(&self.storage, start_time)?;
+        let start_block_index = metric_operations::find_block_index(&self.storage, start_time)?;
 
         let stats = if require_statistics {
             Some(
-                database_operations::determine_statistics_for_time_range(
+                metric_operations::determine_statistics_for_time_range(
                     &self.storage,
                     start_time,
                     end_time,
@@ -173,7 +173,7 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
         };
 
         let mut streaming_operation = create_op(stats.as_ref());
-        database_operations::visit_datapoints_in_time_range(
+        metric_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
             end_time,
@@ -238,7 +238,7 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
 
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
-        let start_block_index = match database_operations::find_block_index(&self.storage, start_time) {
+        let start_block_index = match metric_operations::find_block_index(&self.storage, start_time) {
             Some(start_block_index) => start_block_index,
             None => { return Vec::new(); }
         };
@@ -258,7 +258,7 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
         let window_stats = if require_statistics {
             let mut window_stats = (0..num_windows).map(|_| None).collect::<Vec<_>>();
 
-            database_operations::visit_datapoints_in_time_range(
+            metric_operations::visit_datapoints_in_time_range(
                 &self.storage,
                 start_time,
                 end_time,
@@ -278,7 +278,7 @@ impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
             None
         };
 
-        database_operations::visit_datapoints_in_time_range(
+        metric_operations::visit_datapoints_in_time_range(
             &self.storage,
             start_time,
             end_time,

@@ -1,8 +1,8 @@
 use crate::model::{Datapoint, MinMax, Time};
-use crate::storage::DatabaseStorage;
+use crate::storage::MetricStorage;
 use crate::tags::TagsFilter;
 
-pub fn find_block_index<TStorage: DatabaseStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
+pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
         return None;
     }
@@ -25,13 +25,13 @@ pub fn find_block_index<TStorage: DatabaseStorage<E>, E: Copy>(storage: &TStorag
     Some(lower)
 }
 
-pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage<E>, F: FnMut(Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
-                                                                                                            start_time: Time,
-                                                                                                            end_time: Time,
-                                                                                                            tags_filter: TagsFilter,
-                                                                                                            start_block_index: usize,
-                                                                                                            strict_ordering: bool,
-                                                                                                            mut apply: F) {
+pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
+                                                                                                          start_time: Time,
+                                                                                                          end_time: Time,
+                                                                                                          tags_filter: TagsFilter,
+                                                                                                          start_block_index: usize,
+                                                                                                          strict_ordering: bool,
+                                                                                                          mut apply: F) {
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
@@ -96,11 +96,11 @@ pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage<E>, F: FnMut(Tim
 }
 
 
-pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage<E>, E: Copy + MinMax>(storage: &TStorage,
-                                                                                           start_time: Time,
-                                                                                           end_time: Time,
-                                                                                           tags_filter: TagsFilter,
-                                                                                           start_block_index: usize) -> TimeRangeStatistics<E> {
+pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy + MinMax>(storage: &TStorage,
+                                                                                         start_time: Time,
+                                                                                         end_time: Time,
+                                                                                         tags_filter: TagsFilter,
+                                                                                         start_block_index: usize) -> TimeRangeStatistics<E> {
     let mut stats = TimeRangeStatistics::default();
 
     visit_datapoints_in_time_range(

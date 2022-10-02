@@ -3,19 +3,19 @@ use std::path::Path;
 
 use crate::memory_file::MemoryFile;
 use crate::model::{Datapoint, Time};
-use crate::storage::DatabaseStorage;
+use crate::storage::MetricStorage;
 use crate::Tags;
 
 const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
 const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
 
-pub struct DatabaseStorageFile<E> {
+pub struct MetricStorageFile<E> {
     storage_file: MemoryFile,
     index_file: MemoryFile,
     _phantom: PhantomData<E>
 }
 
-impl<E: Copy> DatabaseStorageFile<E> {
+impl<E: Copy> MetricStorageFile<E> {
     fn initialize(&mut self) {
         unsafe {
             *self.header_mut() = Header {
@@ -107,9 +107,9 @@ impl<E: Copy> DatabaseStorageFile<E> {
     }
 }
 
-impl<E: Copy> DatabaseStorage<E> for DatabaseStorageFile<E> {
+impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
     fn new(base_path: &Path) -> Self {
-        let mut storage = DatabaseStorageFile {
+        let mut storage = MetricStorageFile {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true).unwrap(),
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true).unwrap(),
             _phantom: Default::default()
@@ -120,7 +120,7 @@ impl<E: Copy> DatabaseStorage<E> for DatabaseStorageFile<E> {
     }
 
     fn from_existing(base_path: &Path) -> Self {
-        DatabaseStorageFile {
+        MetricStorageFile {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false).unwrap(),
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false).unwrap(),
             _phantom: Default::default()
