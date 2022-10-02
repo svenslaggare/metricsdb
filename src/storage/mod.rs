@@ -27,4 +27,3 @@ pub trait DatabaseStorage {
 }
 
 pub mod file;
-pub mod memory;
