@@ -14,9 +14,10 @@ impl TagsIndex {
     }
 
     pub fn try_add(&mut self, tag: &str) -> Option<Tags> {
+        let num_bits = std::mem::size_of::<Tags>() * 8;
         if let Some(pattern) = self.mapping.get(tag) {
             return Some(*pattern);
-        } else if self.mapping.len() < 64 {
+        } else if self.mapping.len() < num_bits {
             let pattern = 1 << self.mapping.len();
             self.mapping.insert(tag.to_owned(), pattern);
             Some(pattern)
