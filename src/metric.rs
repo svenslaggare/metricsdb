@@ -136,7 +136,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
 
     pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
         let create = |stats: &TimeRangeStatistics<f32>, percentile: i32| {
-            StreamingApproxPercentile::new(stats.min() as f64, stats.max() as f64, (stats.count as f64).sqrt().ceil() as usize, percentile)
+            let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
+            StreamingApproxPercentile::from_stats(&stats, percentile)
         };
 
         match query.input_transform {
@@ -212,7 +213,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
 
     pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> Vec<(f64, f64)> {
         let create = |stats: &TimeRangeStatistics<f64>, percentile: i32| {
-            StreamingApproxPercentile::new(stats.min(), stats.max(), (stats.count as f64).sqrt().ceil() as usize, percentile)
+            StreamingApproxPercentile::from_stats(stats, percentile)
         };
 
         match query.input_transform {

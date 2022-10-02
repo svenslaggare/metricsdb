@@ -125,6 +125,14 @@ pub struct TimeRangeStatistics<T> {
 }
 
 impl<T: MinMax + Copy> TimeRangeStatistics<T> {
+    pub fn new(count: usize, min: T, max: T) -> TimeRangeStatistics<T> {
+        TimeRangeStatistics {
+            count,
+            min: Some(min),
+            max: Some(max)
+        }
+    }
+
     pub fn min(&self) -> T {
         self.min.unwrap()
     }

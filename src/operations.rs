@@ -1,3 +1,4 @@
+use crate::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
 
 pub trait StreamingOperation<T> {
@@ -173,6 +174,10 @@ impl StreamingApproxPercentile {
             histogram: StreamingHistogram::new(min, max, num_buckets),
             percentile
         }
+    }
+
+    pub fn from_stats(stats: &TimeRangeStatistics<f64>, percentile: i32) -> StreamingApproxPercentile {
+        StreamingApproxPercentile::new(stats.min(), stats.max(), (stats.count as f64).sqrt().ceil() as usize, percentile)
     }
 }
 
