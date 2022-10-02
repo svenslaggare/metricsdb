@@ -75,7 +75,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     }
 
     pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
-        let tags = self.try_add_tags(tags)?;
+        let tags = self.tags_index.try_add_tags(&self.base_path.join("tags.json"), tags)?;
 
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = value as f32;
@@ -113,19 +113,6 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         }
 
         Ok(())
-    }
-
-    fn try_add_tags(&mut self, tags: &[&str]) -> MetricResult<Tags> {
-        let mut changed = false;
-        for tag in tags {
-            changed |= self.tags_index.try_add(*tag).ok_or_else(|| MetricError::ExceededSecondaryTags)?.1;
-        }
-
-        if changed {
-            self.tags_index.save(&self.base_path.join("tags.json")).map_err(|err| MetricError::FailedToSaveTags(err))?;
-        }
-
-        self.tags_index.tags_pattern(tags).ok_or_else(|| MetricError::ExceededSecondaryTags)
     }
 
     pub fn average(&self, query: Query) -> Option<f64> {

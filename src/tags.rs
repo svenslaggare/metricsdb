@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::{Serialize, Deserialize};
 
 use crate::{Tags};
+use crate::metric::{MetricError, MetricResult};
 
 #[derive(Serialize, Deserialize)]
 pub struct TagsIndex {
@@ -15,6 +16,19 @@ impl TagsIndex {
         TagsIndex {
             mapping: HashMap::new()
         }
+    }
+
+    pub fn try_add_tags(&mut self, path: &Path, tags: &[&str]) -> MetricResult<Tags> {
+        let mut changed = false;
+        for tag in tags {
+            changed |= self.try_add(*tag).ok_or_else(|| MetricError::ExceededSecondaryTags)?.1;
+        }
+
+        if changed {
+            self.save(path).map_err(|err| MetricError::FailedToSaveTags(err))?;
+        }
+
+        self.tags_pattern(tags).ok_or_else(|| MetricError::ExceededSecondaryTags)
     }
 
     pub fn try_add(&mut self, tag: &str) -> Option<(Tags, bool)> {
