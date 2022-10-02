@@ -1,4 +1,4 @@
-use crate::model::{Datapoint, MinMax, Time};
+use crate::model::{Datapoint, MinMax, Time, TIME_SCALE};
 use crate::storage::MetricStorage;
 use crate::tags::TagsFilter;
 
@@ -226,6 +226,41 @@ impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> Iterator for DatapointIter
         }
 
         return None;
+    }
+}
+
+pub struct MetricWindowing<T> {
+    pub windows: Vec<Option<T>>,
+    duration: u64,
+    window_start: Time
+}
+
+impl<T> MetricWindowing<T> {
+    pub fn new(start_time: Time, end_time: Time, duration: u64) -> MetricWindowing<T> {
+        let window_start = start_time / duration;
+        let num_windows = (end_time / duration) - window_start;
+
+        MetricWindowing {
+            windows: (0..num_windows).map(|_| None).collect::<Vec<_>>(),
+            duration,
+            window_start
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.windows.len()
+    }
+
+    pub fn get_timestamp(&self, window_index: usize) -> f64 {
+        (((window_index as u64 + self.window_start) * self.duration) / TIME_SCALE) as f64
+    }
+
+    pub fn get_window_index(&self, time: Time) -> usize {
+        ((time / self.duration) - self.window_start) as usize
+    }
+
+    pub fn create_windows<U, F: Fn() -> U>(&self, f: F) -> Vec<U> {
+        (0..self.len()).map(|_| f()).collect::<Vec<_>>()
     }
 }
 

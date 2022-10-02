@@ -6,7 +6,7 @@ use crate::model::{Datapoint, Query, Tags, Time, TIME_SCALE};
 use crate::storage::MetricStorage;
 use crate::storage::file::MetricStorageFile;
 use crate::metric_operations;
-use crate::metric_operations::TimeRangeStatistics;
+use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::tags::TagsIndex;
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
@@ -241,20 +241,10 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             None => { return Vec::new(); }
         };
 
-        let window_start = start_time / duration;
-        let num_windows = (end_time / duration) - window_start;
-        let mut windows = (0..num_windows).map(|_| None).collect::<Vec<_>>();
-
-        let get_timestamp = |window_index: usize| {
-            (((window_index as u64 + window_start) * duration) / TIME_SCALE) as f64
-        };
-
-        let get_window_index = |time: Time| {
-            ((time / duration) - window_start) as usize
-        };
+        let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
         let window_stats = if require_statistics {
-            let mut window_stats = (0..num_windows).map(|_| None).collect::<Vec<_>>();
+            let mut window_stats = windowing.create_windows(|| None);
 
             metric_operations::visit_datapoints_in_time_range(
                 &self.storage,
@@ -265,7 +255,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
                 false,
                 |block_start_time, datapoint| {
                     let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                    window_stats[get_window_index(datapoint_time)]
+                    window_stats[windowing.get_window_index(datapoint_time)]
                         .get_or_insert_with(|| TimeRangeStatistics::default())
                         .handle(datapoint.value as f64);
                 }
@@ -285,8 +275,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             false,
             |block_start_time, datapoint| {
                 let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                let window_index = get_window_index(datapoint_time);
-                windows[window_index]
+                let window_index = windowing.get_window_index(datapoint_time);
+                windowing.windows[window_index]
                     .get_or_insert_with(|| {
                         if require_statistics {
                             create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
@@ -307,11 +297,11 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             }
         };
 
-        windows
+        windowing.windows
             .iter()
             .filter(|operation| operation.is_some())
             .enumerate()
-            .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (get_timestamp(start), value)))
+            .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (windowing.get_timestamp(start), value)))
             .flatten()
             .collect()
     }
