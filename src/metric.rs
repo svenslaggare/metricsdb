@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
@@ -24,6 +24,7 @@ pub type MetricResult<T> = Result<T, MetricError>;
 pub struct Metric<TStorage: MetricStorage<f32>> {
     block_duration: u64,
     datapoint_duration: u64,
+    base_path: PathBuf,
     storage: TStorage,
     tags_index: TagsIndex
 }
@@ -37,6 +38,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         Metric {
             block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
             datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
+            base_path: base_path.to_owned(),
             storage: TStorage::new(base_path),
             tags_index: TagsIndex::new()
         }
@@ -46,8 +48,9 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         Metric {
             block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
             datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
+            base_path: base_path.to_owned(),
             storage: TStorage::from_existing(base_path),
-            tags_index: TagsIndex::new() // TODO: load from disk
+            tags_index: TagsIndex::load(&base_path.join("tags.json")).unwrap()
         }
     }
 
@@ -72,7 +75,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     }
 
     pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
-        let tags = self.try_add_tags(tags).ok_or_else(|| MetricError::ExceededSecondaryTags)?;
+        let tags = self.try_add_tags(tags)?;
 
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = value as f32;
@@ -112,11 +115,17 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         Ok(())
     }
 
-    fn try_add_tags(&mut self, tags: &[&str]) -> Option<Tags> {
+    fn try_add_tags(&mut self, tags: &[&str]) -> MetricResult<Tags> {
+        let mut changed = false;
         for tag in tags {
-            self.tags_index.try_add(*tag)?;
+            changed |= self.tags_index.try_add(*tag).ok_or_else(|| MetricError::ExceededSecondaryTags)?.1;
         }
-        self.tags_index.tags_pattern(tags)
+
+        if changed {
+            self.tags_index.save(&self.base_path.join("tags.json")).map_err(|err| MetricError::FailedToSaveTags(err))?;
+        }
+
+        self.tags_index.tags_pattern(tags).ok_or_else(|| MetricError::ExceededSecondaryTags)
     }
 
     pub fn average(&self, query: Query) -> Option<f64> {
@@ -323,7 +332,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum MetricError {
-    ExceededSecondaryTags
+    ExceededSecondaryTags,
+    FailedToSaveTags(std::io::Error)
 }

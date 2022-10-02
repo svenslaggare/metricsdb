@@ -27,11 +27,11 @@ struct SampleData {
 fn main() {
     let data = std::fs::read_to_string("output.json").unwrap();
     let data: SampleData = serde_json::from_str(&data).unwrap();
+    let tags_list = vec!["tag:T1", "tag:T2"];
 
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultMetric::new(Path::new("metrics"));
-    let tags_list = vec!["tag:T1", "tag:T2"];
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);

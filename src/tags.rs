@@ -1,7 +1,11 @@
 use std::collections::HashMap;
+use std::path::Path;
+
+use serde::{Serialize, Deserialize};
 
 use crate::{Tags};
 
+#[derive(Serialize, Deserialize)]
 pub struct TagsIndex {
     mapping: HashMap<String, Tags>
 }
@@ -13,14 +17,14 @@ impl TagsIndex {
         }
     }
 
-    pub fn try_add(&mut self, tag: &str) -> Option<Tags> {
+    pub fn try_add(&mut self, tag: &str) -> Option<(Tags, bool)> {
         let num_bits = std::mem::size_of::<Tags>() * 8;
         if let Some(pattern) = self.mapping.get(tag) {
-            return Some(*pattern);
+            return Some((*pattern, false));
         } else if self.mapping.len() < num_bits {
             let pattern = 1 << self.mapping.len();
-            self.mapping.insert(tag.to_owned(), pattern);
-            Some(pattern)
+            let inserted = self.mapping.insert(tag.to_owned(), pattern).is_none();
+            Some((pattern, inserted))
         } else {
             None
         }
@@ -33,6 +37,18 @@ impl TagsIndex {
         }
 
         Some(pattern)
+    }
+
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let content = serde_json::to_string(&self)?;
+        std::fs::write(path, &content)?;
+        Ok(())
+    }
+
+    pub fn load(path: &Path) -> std::io::Result<TagsIndex> {
+        let content = std::fs::read_to_string(path)?;
+        let tags = serde_json::from_str(&content)?;
+        Ok(tags)
     }
 }
 
