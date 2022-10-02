@@ -54,11 +54,13 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         let mut num_datapoints = 0;
         let mut max_datapoints_in_block = 0;
         for block_index in 0..self.storage.len() {
-            self.storage.visit_datapoints(block_index, |_, datapoints| {
-                let block_length = datapoints.len();
-                num_datapoints += block_length;
-                max_datapoints_in_block = max_datapoints_in_block.max(block_length);
-            });
+            if let Some(iterator) = self.storage.block_datapoints(block_index) {
+                for (_, datapoints) in iterator {
+                    let block_length = datapoints.len();
+                    num_datapoints += block_length;
+                    max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+                }
+            }
         }
         println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
     }
