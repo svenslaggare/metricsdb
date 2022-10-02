@@ -17,16 +17,16 @@ pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 // pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.5;
 
-pub type DefaultDatabase = Database<DatabaseStorageFile>;
+pub type DefaultDatabase = Database<DatabaseStorageFile<f32>>;
 
-pub struct Database<TStorage: DatabaseStorage> {
+pub struct Database<TStorage: DatabaseStorage<f32>> {
     block_duration: u64,
     datapoint_duration: u64,
     storage: TStorage,
     tags_index: TagsIndex
 }
 
-impl<TStorage: DatabaseStorage> Database<TStorage> {
+impl<TStorage: DatabaseStorage<f32>> Database<TStorage> {
     pub fn new(base_path: &Path) -> Database<TStorage> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).unwrap();
@@ -120,7 +120,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn max(&self, query: Query) -> Option<f64> {
-        self.simple_operation::<StreamingMax>(query)
+        self.simple_operation::<StreamingMax::<f64>>(query)
     }
 
     fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> Option<f64> {
@@ -135,8 +135,8 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
-        let create = |stats: &TimeRangeStatistics, percentile: i32| {
-            StreamingApproxPercentile::new(stats.min, stats.max, (stats.count as f64).sqrt().ceil() as usize, percentile)
+        let create = |stats: &TimeRangeStatistics<f32>, percentile: i32| {
+            StreamingApproxPercentile::new(stats.min() as f64, stats.max() as f64, (stats.count as f64).sqrt().ceil() as usize, percentile)
         };
 
         match query.input_transform {
@@ -149,10 +149,10 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }
     }
 
-    fn operation<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics>) -> T>(&self,
-                                                                                       query: Query,
-                                                                                       create_op: F,
-                                                                                       require_statistics: bool) -> Option<f64> {
+    fn operation<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics<f32>>) -> T>(&self,
+                                                                                            query: Query,
+                                                                                            create_op: F,
+                                                                                            require_statistics: bool) -> Option<f64> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -205,7 +205,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
         match query.input_transform {
             Some(op) => {
-                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingMax>::from_default(op), false)
+                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<StreamingMax::<f64>>::from_default(op), false)
             }
             None => {
                 self.operation_in_window(query, duration, |_| StreamingMax::new(), false)
@@ -214,8 +214,8 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
     }
 
     pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> Vec<(f64, f64)> {
-        let create = |stats: &TimeRangeStatistics, percentile: i32| {
-            StreamingApproxPercentile::new(stats.min, stats.max, (stats.count as f64).sqrt().ceil() as usize, percentile)
+        let create = |stats: &TimeRangeStatistics<f64>, percentile: i32| {
+            StreamingApproxPercentile::new(stats.min(), stats.max(), (stats.count as f64).sqrt().ceil() as usize, percentile)
         };
 
         match query.input_transform {
@@ -228,11 +228,11 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
         }
     }
 
-    fn operation_in_window<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics>) -> T>(&self,
-                                                                                                 query: Query,
-                                                                                                 duration: Duration,
-                                                                                                 create_op: F,
-                                                                                                 require_statistics: bool) -> Vec<(f64, f64)> {
+    fn operation_in_window<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics<f64>>) -> T>(&self,
+                                                                                                      query: Query,
+                                                                                                      duration: Duration,
+                                                                                                      create_op: F,
+                                                                                                      require_statistics: bool) -> Vec<(f64, f64)> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -255,7 +255,7 @@ impl<TStorage: DatabaseStorage> Database<TStorage> {
             ((time / duration) - window_start) as usize
         };
 
-        let mut window_stats = if require_statistics {
+        let window_stats = if require_statistics {
             let mut window_stats = (0..num_windows).map(|_| None).collect::<Vec<_>>();
 
             database_operations::visit_datapoints_in_time_range(

@@ -1,8 +1,8 @@
-use crate::model::{Datapoint, Time};
+use crate::model::{Datapoint, MinMax, Time};
 use crate::storage::DatabaseStorage;
 use crate::tags::TagsFilter;
 
-pub fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Time) -> Option<usize> {
+pub fn find_block_index<TStorage: DatabaseStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
         return None;
     }
@@ -25,13 +25,13 @@ pub fn find_block_index<TStorage: DatabaseStorage>(storage: &TStorage, time: Tim
     Some(lower)
 }
 
-pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, &Datapoint)>(storage: &TStorage,
-                                                                                             start_time: Time,
-                                                                                             end_time: Time,
-                                                                                             tags_filter: TagsFilter,
-                                                                                             start_block_index: usize,
-                                                                                             strict_ordering: bool,
-                                                                                             mut apply: F) {
+pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage<E>, F: FnMut(Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
+                                                                                                            start_time: Time,
+                                                                                                            end_time: Time,
+                                                                                                            tags_filter: TagsFilter,
+                                                                                                            start_block_index: usize,
+                                                                                                            strict_ordering: bool,
+                                                                                                            mut apply: F) {
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
@@ -95,35 +95,12 @@ pub fn visit_datapoints_in_time_range<TStorage: DatabaseStorage, F: FnMut(Time, 
     }
 }
 
-pub struct TimeRangeStatistics {
-    pub count: usize,
-    pub min: f64,
-    pub max: f64
-}
 
-impl TimeRangeStatistics {
-    pub fn handle(&mut self, value: f64) {
-        self.count += 1;
-        self.min = self.min.min(value);
-        self.max = self.max.max(value);
-    }
-}
-
-impl Default for TimeRangeStatistics {
-    fn default() -> Self {
-        TimeRangeStatistics {
-            count: 0,
-            min: f64::INFINITY,
-            max: f64::NEG_INFINITY
-        }
-    }
-}
-
-pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &TStorage,
-                                                                      start_time: Time,
-                                                                      end_time: Time,
-                                                                      tags_filter: TagsFilter,
-                                                                      start_block_index: usize) -> TimeRangeStatistics {
+pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage<E>, E: Copy + MinMax>(storage: &TStorage,
+                                                                                           start_time: Time,
+                                                                                           end_time: Time,
+                                                                                           tags_filter: TagsFilter,
+                                                                                           start_block_index: usize) -> TimeRangeStatistics<E> {
     let mut stats = TimeRangeStatistics::default();
 
     visit_datapoints_in_time_range(
@@ -134,29 +111,70 @@ pub fn determine_statistics_for_time_range<TStorage: DatabaseStorage>(storage: &
         start_block_index,
         false,
         |_, datapoint| {
-            stats.handle(datapoint.value as f64);
+            stats.handle(datapoint.value);
         }
     );
 
     stats
 }
 
-struct DatapointIterator<'a, T: Iterator<Item=&'a Datapoint>> {
+pub struct TimeRangeStatistics<T> {
+    pub count: usize,
+    min: Option<T>,
+    max: Option<T>
+}
+
+impl<T: MinMax + Copy> TimeRangeStatistics<T> {
+    pub fn min(&self) -> T {
+        self.min.unwrap()
+    }
+
+    pub fn max(&self) -> T {
+        self.max.unwrap()
+    }
+
+    pub fn handle(&mut self, value: T) {
+        self.count += 1;
+
+        if self.min.is_none() {
+            self.min = Some(value);
+            self.max = Some(value);
+            return;
+        }
+
+        let min = self.min.as_mut().unwrap();
+        let max = self.max.as_mut().unwrap();
+        *min = min.min(value);
+        *max = max.max(value);
+    }
+}
+
+impl<T> Default for TimeRangeStatistics<T> {
+    fn default() -> Self {
+        TimeRangeStatistics {
+            count: 0,
+            min: None,
+            max: None
+        }
+    }
+}
+
+struct DatapointIterator<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> {
     start_time: Time,
     end_time: Time,
     block_start_time: Time,
     block_end_time: Time,
     iterator: T,
     outside_time_range: bool,
-    peeked: Option<Option<&'a Datapoint>>
+    peeked: Option<Option<&'a Datapoint<E>>>
 }
 
-impl<'a, T: Iterator<Item=&'a Datapoint>> DatapointIterator<'a, T> {
+impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> DatapointIterator<'a, T, E> {
     pub fn new(start_time: Time,
                end_time: Time,
                block_start_time: Time,
                block_end_time: Time,
-               iterator: T) -> DatapointIterator<'a, T> {
+               iterator: T) -> DatapointIterator<'a, T, E> {
         DatapointIterator {
             start_time,
             end_time,
@@ -168,7 +186,7 @@ impl<'a, T: Iterator<Item=&'a Datapoint>> DatapointIterator<'a, T> {
         }
     }
 
-    pub fn peek(&mut self) -> Option<&'a Datapoint> {
+    pub fn peek(&mut self) -> Option<&'a Datapoint<E>> {
         match self.peeked {
             Some(value) => value,
             None => {
@@ -179,8 +197,8 @@ impl<'a, T: Iterator<Item=&'a Datapoint>> DatapointIterator<'a, T> {
     }
 }
 
-impl<'a, T: Iterator<Item=&'a Datapoint>> Iterator for DatapointIterator<'a, T> {
-    type Item = &'a Datapoint;
+impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> Iterator for DatapointIterator<'a, T, E> {
+    type Item = &'a Datapoint<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(element) = self.peeked.take() {

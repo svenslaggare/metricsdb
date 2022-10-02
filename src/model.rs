@@ -6,9 +6,9 @@ pub type Tags = u64;
 pub const TIME_SCALE: u64 = 1_000_000;
 
 #[derive(Clone)]
-pub struct Datapoint {
+pub struct Datapoint<T: Copy> {
     pub time_offset: u32,
-    pub value: f32
+    pub value: T
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,50 +72,27 @@ impl Query {
     }
 }
 
-#[test]
-fn test_tags_filter1() {
-    let current_tags = 0;
-    assert_eq!(false, TagsFilter::And(1).accept(current_tags));
+pub trait MinMax {
+    fn min(&self, other: Self) -> Self;
+    fn max(&self, other: Self) -> Self;
 }
 
-#[test]
-fn test_tags_filter2() {
-    let current_tags = 1;
-    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
+impl MinMax for f64 {
+    fn min(&self, other: Self) -> Self {
+        f64::min(*self, other)
+    }
+
+    fn max(&self, other: Self) -> Self {
+        f64::max(*self, other)
+    }
 }
 
-#[test]
-fn test_tags_filter3() {
-    let current_tags = 1 | (1 << 2);
-    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
-}
+impl MinMax for f32 {
+    fn min(&self, other: Self) -> Self {
+        f32::min(*self, other)
+    }
 
-#[test]
-fn test_tags_filter4() {
-    let current_tags = 1;
-    assert_eq!(false, TagsFilter::And(1 | (1 << 2)).accept(current_tags));
-}
-
-#[test]
-fn test_tags_filter5() {
-    let current_tags = 1;
-    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
-}
-
-#[test]
-fn test_tags_filter6() {
-    let current_tags = 1;
-    assert_eq!(true, TagsFilter::Or(1 | (1 << 2)).accept(current_tags));
-}
-
-#[test]
-fn test_tags_filter7() {
-    let current_tags = 1 | (1 << 2);
-    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
-}
-
-#[test]
-fn test_tags_filter8() {
-    let current_tags = 2;
-    assert_eq!(false, TagsFilter::Or(1).accept(current_tags));
+    fn max(&self, other: Self) -> Self {
+        f32::max(*self, other)
+    }
 }

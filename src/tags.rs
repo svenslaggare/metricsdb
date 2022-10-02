@@ -92,3 +92,51 @@ fn test_or_filter1() {
 
     assert_eq!(Some(TagsFilter::Or(1 | 2)), index.tags_pattern(&["tag:T1", "tag:T2"]).map(|pattern| TagsFilter::Or(pattern)));
 }
+
+#[test]
+fn test_tags_filter1() {
+    let current_tags = 0;
+    assert_eq!(false, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter2() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter3() {
+    let current_tags = 1 | (1 << 2);
+    assert_eq!(true, TagsFilter::And(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter4() {
+    let current_tags = 1;
+    assert_eq!(false, TagsFilter::And(1 | (1 << 2)).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter5() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter6() {
+    let current_tags = 1;
+    assert_eq!(true, TagsFilter::Or(1 | (1 << 2)).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter7() {
+    let current_tags = 1 | (1 << 2);
+    assert_eq!(true, TagsFilter::Or(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter8() {
+    let current_tags = 2;
+    assert_eq!(false, TagsFilter::Or(1).accept(current_tags));
+}

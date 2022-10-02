@@ -1,3 +1,5 @@
+use crate::model::MinMax;
+
 pub trait StreamingOperation<T> {
     fn add(&mut self, value: T);
     fn value(&self) -> Option<T>;
@@ -19,7 +21,7 @@ impl<T: Default> StreamingAverage<T> {
     }
 }
 
-impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> StreamingOperation<T> for StreamingAverage<T> {
+impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> StreamingOperation<T> for StreamingAverage<T> {
     fn add(&mut self, value: T) {
         self.sum += value;
         self.count += 1;
@@ -39,26 +41,26 @@ impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> 
     }
 }
 
-impl<T: Clone + Default + Clone + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> Default for StreamingAverage<T> {
+impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> Default for StreamingAverage<T> {
     fn default() -> Self {
         StreamingAverage::new()
     }
 }
 
-pub struct StreamingMax {
-    max: Option<f64>
+pub struct StreamingMax<T> {
+    max: Option<T>
 }
 
-impl StreamingMax {
-    pub fn new() -> StreamingMax {
+impl<T> StreamingMax<T> {
+    pub fn new() -> StreamingMax<T> {
         StreamingMax {
             max: None
         }
     }
 }
 
-impl StreamingOperation<f64> for StreamingMax {
-    fn add(&mut self, value: f64) {
+impl<T: MinMax + Copy> StreamingOperation<T> for StreamingMax<T> {
+    fn add(&mut self, value: T) {
         if let Some(max) = self.max.as_mut() {
             *max = max.max(value);
         } else {
@@ -66,7 +68,7 @@ impl StreamingOperation<f64> for StreamingMax {
         }
     }
 
-    fn value(&self) -> Option<f64> {
+    fn value(&self) -> Option<T> {
         self.max
     }
 
@@ -77,7 +79,7 @@ impl StreamingOperation<f64> for StreamingMax {
     }
 }
 
-impl Default for StreamingMax {
+impl<T> Default for StreamingMax<T> {
     fn default() -> Self {
         StreamingMax::new()
     }
