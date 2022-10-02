@@ -22,8 +22,6 @@ pub type DefaultMetric = Metric<MetricStorageFile<f32>>;
 pub type MetricResult<T> = Result<T, MetricError>;
 
 pub struct Metric<TStorage: MetricStorage<f32>> {
-    block_duration: u64,
-    datapoint_duration: u64,
     base_path: PathBuf,
     storage: TStorage,
     tags_index: TagsIndex
@@ -36,18 +34,18 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         }
 
         Metric {
-            block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
-            datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
             base_path: base_path.to_owned(),
-            storage: TStorage::new(base_path),
+            storage: TStorage::new(
+                base_path,
+                (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
+                (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64
+            ),
             tags_index: TagsIndex::new()
         }
     }
 
     pub fn from_existing(base_path: &Path) -> Metric<TStorage> {
         Metric {
-            block_duration: (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
-            datapoint_duration: (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64,
             base_path: base_path.to_owned(),
             storage: TStorage::from_existing(base_path),
             tags_index: TagsIndex::load(&base_path.join("tags.json")).unwrap()
@@ -88,17 +86,18 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         if let Some(block_start_time) = self.storage.active_block_start_time() {
             assert!(time >= block_start_time, "{}, {}", time, block_start_time);
 
-            if time - block_start_time < self.block_duration {
-                let time_offset = time - block_start_time;
+            let time_offset = time - block_start_time;
+            if time_offset < self.storage.block_duration() {
                 assert!(time_offset < u32::MAX as u64);
                 datapoint.time_offset = time_offset as u32;
 
+                let datapoint_duration = self.storage.datapoint_duration();
                 let last_datapoint = self.storage.active_block_datapoints_mut(tags)
                     .map(|datapoint| datapoint.last_mut())
                     .flatten();
 
                 if let Some(last_datapoint) = last_datapoint {
-                    if (time - (block_start_time + last_datapoint.time_offset as u64)) < self.datapoint_duration {
+                    if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
                         last_datapoint.value = value;
                         return Ok(());
                     }

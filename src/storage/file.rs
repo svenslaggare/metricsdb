@@ -16,12 +16,14 @@ pub struct MetricStorageFile<E> {
 }
 
 impl<E: Copy> MetricStorageFile<E> {
-    fn initialize(&mut self) {
+    fn initialize(&mut self, block_duration: u64, datapoint_duration: u64) {
         unsafe {
             *self.header_mut() = Header {
                 num_blocks: 0,
                 active_block_index: 0,
-                active_block_start: std::mem::size_of::<Header>()
+                active_block_start: std::mem::size_of::<Header>(),
+                block_duration,
+                datapoint_duration
             };
         }
     }
@@ -108,14 +110,14 @@ impl<E: Copy> MetricStorageFile<E> {
 }
 
 impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
-    fn new(base_path: &Path) -> Self {
+    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Self {
         let mut storage = MetricStorageFile {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true).unwrap(),
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true).unwrap(),
             _phantom: Default::default()
         };
 
-        storage.initialize();
+        storage.initialize(block_duration, datapoint_duration);
         storage
     }
 
@@ -125,6 +127,14 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false).unwrap(),
             _phantom: Default::default()
         }
+    }
+
+    fn block_duration(&self) -> u64 {
+        unsafe { (*self.header()).block_duration }
+    }
+
+    fn datapoint_duration(&self) -> u64 {
+        unsafe { (*self.header()).datapoint_duration }
     }
 
     fn len(&self) -> usize {
@@ -247,6 +257,8 @@ impl<'a, E: Copy> Iterator for SubBlockIterator<'a, E> {
 
 struct Header {
     num_blocks: usize,
+    block_duration: u64,
+    datapoint_duration: u64,
     active_block_index: usize,
     active_block_start: usize,
 }
