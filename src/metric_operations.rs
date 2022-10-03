@@ -1,7 +1,7 @@
 use crate::model::{Datapoint, MinMax, Time, TIME_SCALE};
 use crate::operations::StreamingOperation;
 use crate::storage::MetricStorage;
-use crate::tags::TagsFilter;
+use crate::tags::SecondaryTagsFilter;
 
 pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
@@ -29,7 +29,7 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
 pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
                                                                                                           start_time: Time,
                                                                                                           end_time: Time,
-                                                                                                          tags_filter: TagsFilter,
+                                                                                                          tags_filter: SecondaryTagsFilter,
                                                                                                           start_block_index: usize,
                                                                                                           strict_ordering: bool,
                                                                                                           mut apply: F) {
@@ -100,7 +100,7 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
 pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy + MinMax>(storage: &TStorage,
                                                                                          start_time: Time,
                                                                                          end_time: Time,
-                                                                                         tags_filter: TagsFilter,
+                                                                                         tags_filter: SecondaryTagsFilter,
                                                                                          start_block_index: usize) -> TimeRangeStatistics<E> {
     let mut stats = TimeRangeStatistics::default();
 
@@ -266,6 +266,10 @@ impl<T> MetricWindowing<T> {
 
     pub fn create_windows<U, F: Fn() -> U>(&self, f: F) -> Vec<U> {
         (0..self.len()).map(|_| f()).collect::<Vec<_>>()
+    }
+
+    pub fn into_windows(self) -> Vec<Option<T>> {
+        self.windows
     }
 }
 

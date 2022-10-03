@@ -7,7 +7,7 @@ use crate::metric::{DefaultMetric};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
-use crate::tags::TagsFilter;
+use crate::tags::{TagsFilter};
 
 mod helpers;
 mod memory_file;
@@ -31,12 +31,14 @@ fn main() {
 
     println!("n: {}", data.times.len());
 
-    let mut metric = DefaultMetric::new(Path::new("metrics"));
+    let mut metric = DefaultMetric::new(Path::new("metric"));
+    metric.add_primary_tag("tag:T1");
+    metric.add_primary_tag("tag:T2");
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags = &[&tags_list[0]];
+            // let tags = &[];
             let tags = &[tags_list[(index % 2)]];
             metric.gauge(data.times[index], data.values[index] as f64, tags).unwrap();
         }
@@ -44,7 +46,7 @@ fn main() {
 
     metric.stats();
 
-    // let mut metric = DefaultMetric::from_existing(Path::new("metrics"));
+    // let mut metric = DefaultMetric::from_existing(Path::new("metric"));
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
@@ -64,7 +66,7 @@ fn main() {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
         println!("Avg (tags=1): {}", metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::And(metric.tags_pattern(&[&tags_list[0]]).unwrap()))
+                .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
         ).unwrap_or(0.0));
     }
 
@@ -81,10 +83,10 @@ fn main() {
         println!("Max: {}", metric.max(Query::new(TimeRange::new(start_time, end_time))).unwrap());
     }
 
-    {
-        let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
-        println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
-    }
+    // {
+    //     let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
+    //     println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
+    // }
 
     {
         let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);

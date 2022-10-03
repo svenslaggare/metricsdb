@@ -1,13 +1,16 @@
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use fnv::FnvHashMap;
+
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
-use crate::model::{Datapoint, Query, Tags, Time, TIME_SCALE};
+use crate::model::{Datapoint, Query, Time, TIME_SCALE};
 use crate::storage::MetricStorage;
 use crate::storage::file::MetricStorageFile;
-use crate::metric_operations;
+use crate::{metric_operations};
 use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::tags::TagsIndex;
+use crate::tags::SecondaryTagsIndex;
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
 // pub const DEFAULT_BLOCK_DURATION: f64 = 1.0;
@@ -21,10 +24,15 @@ pub type DefaultMetric = Metric<MetricStorageFile<f32>>;
 
 pub type MetricResult<T> = Result<T, MetricError>;
 
+#[derive(Debug)]
+pub enum MetricError {
+    ExceededSecondaryTags,
+    FailedToSaveTags(std::io::Error)
+}
+
 pub struct Metric<TStorage: MetricStorage<f32>> {
     base_path: PathBuf,
-    storage: TStorage,
-    tags_index: TagsIndex
+    primary_tags: FnvHashMap<Option<String>, PrimaryTagMetric<TStorage, f32>>
 }
 
 impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
@@ -33,47 +41,79 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             std::fs::create_dir_all(base_path).unwrap();
         }
 
-        Metric {
+        let mut primary_tags = FnvHashMap::default();
+        primary_tags.insert(None, PrimaryTagMetric::new(&base_path.join("default"), DEFAULT_BLOCK_DURATION, DEFAULT_DATAPOINT_DURATION));
+
+        let metric = Metric {
             base_path: base_path.to_owned(),
-            storage: TStorage::new(
-                base_path,
-                (DEFAULT_BLOCK_DURATION * TIME_SCALE as f64) as u64,
-                (DEFAULT_DATAPOINT_DURATION * TIME_SCALE as f64) as u64
-            ),
-            tags_index: TagsIndex::new()
-        }
+            primary_tags
+        };
+
+        metric.save_primary_tags().unwrap();
+
+        metric
     }
 
     pub fn from_existing(base_path: &Path) -> Metric<TStorage> {
+        let mut primary_tags = FnvHashMap::default();
+        primary_tags.insert(None, PrimaryTagMetric::from_existing(&base_path.join("default")));
+
         Metric {
             base_path: base_path.to_owned(),
-            storage: TStorage::from_existing(base_path),
-            tags_index: TagsIndex::load(&base_path.join("tags.json")).unwrap()
+            primary_tags
         }
     }
 
     pub fn stats(&self) {
-        println!("Num blocks: {}", self.storage.len());
-        let mut num_datapoints = 0;
-        let mut max_datapoints_in_block = 0;
-        for block_index in 0..self.storage.len() {
-            if let Some(iterator) = self.storage.block_datapoints(block_index) {
-                for (_, datapoints) in iterator {
-                    let block_length = datapoints.len();
-                    num_datapoints += block_length;
-                    max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+        for (tag, primary_tag) in self.primary_tags.iter() {
+            println!("Tag: {:?}", tag);
+            println!("Num blocks: {}", primary_tag.storage.len());
+            let mut num_datapoints = 0;
+            let mut max_datapoints_in_block = 0;
+            for block_index in 0..primary_tag.storage.len() {
+                if let Some(iterator) = primary_tag.storage.block_datapoints(block_index) {
+                    for (_, datapoints) in iterator {
+                        let block_length = datapoints.len();
+                        num_datapoints += block_length;
+                        max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+                    }
                 }
             }
+            println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
         }
-        println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
     }
 
-    pub fn tags_pattern(&self, tags: &[&str]) -> Option<Tags> {
-        self.tags_index.tags_pattern(tags)
+    pub fn add_primary_tag(&mut self, tag: &str) {
+        let mut inserted = false;
+        self.primary_tags
+            .entry(Some(tag.to_owned()))
+            .or_insert_with(|| {
+                inserted = true;
+                PrimaryTagMetric::new(&self.base_path.join(tag), DEFAULT_BLOCK_DURATION, DEFAULT_DATAPOINT_DURATION)
+            });
+
+        if inserted {
+            self.save_primary_tags().unwrap();
+        }
+    }
+
+    fn save_primary_tags(&self) -> std::io::Result<()> {
+        let content = serde_json::to_string(&self.primary_tags.keys().collect::<Vec<_>>())?;
+        std::fs::write(&self.base_path.join("primary_tags.json"), &content)?;
+        Ok(())
     }
 
     pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
-        let tags = self.tags_index.try_add_tags(&self.base_path.join("tags.json"), tags)?;
+        let mut tags = tags.into_iter().cloned().collect::<Vec<_>>();
+
+        let (primary_tag_id, mut primary_tag) = self.extract_primary_tag(&mut tags);
+        let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
+            Ok(secondary_tags) => secondary_tags,
+            Err(err) => {
+                self.primary_tags.insert(primary_tag_id, primary_tag);
+                return Err(err);
+            }
+        };
 
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = value as f32;
@@ -83,16 +123,16 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             value
         };
 
-        if let Some(block_start_time) = self.storage.active_block_start_time() {
+        if let Some(block_start_time) = primary_tag.storage.active_block_start_time() {
             assert!(time >= block_start_time, "{}, {}", time, block_start_time);
 
             let time_offset = time - block_start_time;
-            if time_offset < self.storage.block_duration() {
+            if time_offset < primary_tag.storage.block_duration() {
                 assert!(time_offset < u32::MAX as u64);
                 datapoint.time_offset = time_offset as u32;
 
-                let datapoint_duration = self.storage.datapoint_duration();
-                let last_datapoint = self.storage.active_block_datapoints_mut(tags)
+                let datapoint_duration = primary_tag.storage.datapoint_duration();
+                let last_datapoint = primary_tag.storage.active_block_datapoints_mut(secondary_tags)
                     .map(|datapoint| datapoint.last_mut())
                     .flatten();
 
@@ -103,14 +143,15 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
                     }
                 }
 
-                self.storage.add_datapoint(tags, datapoint);
+                primary_tag.storage.add_datapoint(secondary_tags, datapoint);
             } else {
-                self.storage.create_block_with_datapoint(time, tags, datapoint);
+                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
             }
         } else {
-            self.storage.create_block_with_datapoint(time, tags, datapoint);
+            primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
         }
 
+        self.primary_tags.insert(primary_tag_id, primary_tag);
         Ok(())
     }
 
@@ -156,34 +197,50 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
-        let start_block_index = metric_operations::find_block_index(&self.storage, start_time)?;
+        let mut streaming_operations = Vec::new();
+        for (primary_tag_value, primary_tag) in self.primary_tags.iter() {
+            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let stats = if require_statistics {
+                        Some(
+                            metric_operations::determine_statistics_for_time_range(
+                                &primary_tag.storage,
+                                start_time,
+                                end_time,
+                                tags_filter,
+                                start_block_index
+                            )
+                        )
+                    } else {
+                        None
+                    };
 
-        let stats = if require_statistics {
-            Some(
-                metric_operations::determine_statistics_for_time_range(
-                    &self.storage,
-                    start_time,
-                    end_time,
-                    query.tags_filter.clone(),
-                    start_block_index
-                )
-            )
-        } else {
-            None
-        };
+                    let mut streaming_operation = create_op(stats.as_ref());
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |_, datapoint| {
+                            streaming_operation.add(datapoint.value as f64);
+                        }
+                    );
 
-        let mut streaming_operation = create_op(stats.as_ref());
-        metric_operations::visit_datapoints_in_time_range(
-            &self.storage,
-            start_time,
-            end_time,
-            query.tags_filter,
-            start_block_index,
-            false,
-            |_, datapoint| {
-                streaming_operation.add(datapoint.value as f64);
+                    streaming_operations.push(streaming_operation);
+                }
             }
-        );
+        }
+
+        if streaming_operations.is_empty() {
+            return None;
+        }
+
+        let mut streaming_operation = streaming_operations.remove(0);
+        for other_operation in streaming_operations.into_iter() {
+            streaming_operation.merge(other_operation);
+        }
 
         match query.output_transform {
             Some(operation) => operation.apply(streaming_operation.value()?),
@@ -235,58 +292,80 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
 
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
-        let start_block_index = match metric_operations::find_block_index(&self.storage, start_time) {
-            Some(start_block_index) => start_block_index,
-            None => { return Vec::new(); }
-        };
+        let mut primary_tag_windows = Vec::new();
+        for (primary_tag_value, primary_tag) in self.primary_tags.iter() {
+            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
-        let mut windowing = MetricWindowing::new(start_time, end_time, duration);
+                    let window_stats = if require_statistics {
+                        let mut window_stats = windowing.create_windows(|| None);
 
-        let window_stats = if require_statistics {
-            let mut window_stats = windowing.create_windows(|| None);
+                        metric_operations::visit_datapoints_in_time_range(
+                            &primary_tag.storage,
+                            start_time,
+                            end_time,
+                            tags_filter,
+                            start_block_index,
+                            false,
+                            |block_start_time, datapoint| {
+                                let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                                window_stats[windowing.get_window_index(datapoint_time)]
+                                    .get_or_insert_with(|| TimeRangeStatistics::default())
+                                    .handle(datapoint.value as f64);
+                            }
+                        );
 
-            metric_operations::visit_datapoints_in_time_range(
-                &self.storage,
-                start_time,
-                end_time,
-                query.tags_filter,
-                start_block_index,
-                false,
-                |block_start_time, datapoint| {
-                    let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                    window_stats[windowing.get_window_index(datapoint_time)]
-                        .get_or_insert_with(|| TimeRangeStatistics::default())
-                        .handle(datapoint.value as f64);
-                }
-            );
+                        Some(window_stats)
+                    } else {
+                        None
+                    };
 
-            Some(window_stats)
-        } else {
-            None
-        };
-
-        metric_operations::visit_datapoints_in_time_range(
-            &self.storage,
-            start_time,
-            end_time,
-            query.tags_filter,
-            start_block_index,
-            false,
-            |block_start_time, datapoint| {
-                let datapoint_time = block_start_time + datapoint.time_offset as Time;
-                let window_index = windowing.get_window_index(datapoint_time);
-                windowing.get(window_index)
-                    .get_or_insert_with(|| {
-                        if require_statistics {
-                            create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
-                        } else {
-                            create_op(None)
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |block_start_time, datapoint| {
+                            let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                            let window_index = windowing.get_window_index(datapoint_time);
+                            windowing.get(window_index)
+                                .get_or_insert_with(|| {
+                                    if require_statistics {
+                                        create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
+                                    } else {
+                                        create_op(None)
+                                    }
+                                })
+                                .add(datapoint.value as f64);
                         }
-                    })
-                    .add(datapoint.value as f64);
-            }
-        );
+                    );
 
+                    primary_tag_windows.push(windowing);
+                }
+            }
+        }
+
+        if primary_tag_windows.is_empty() {
+            return Vec::new();
+        }
+
+        let mut windowing = primary_tag_windows.remove(0);
+        for current_windowing in primary_tag_windows.into_iter() {
+            for (window_index, current_window) in current_windowing.into_windows().into_iter().enumerate() {
+                let merged_window = windowing.get(window_index);
+
+                if let Some(merged_window) = merged_window {
+                    if let Some(current_window) = current_window {
+                        merged_window.merge(current_window);
+                    }
+                } else {
+                    *merged_window = current_window;
+                }
+            }
+        }
         metric_operations::extract_operations_in_windows(
             windowing,
             |value| {
@@ -299,10 +378,48 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             }
         )
     }
+
+    fn extract_primary_tag<'a>(&'a mut self, tags: &mut Vec<&str>) -> (Option<String>, PrimaryTagMetric<TStorage, f32>) {
+        for (index, tag) in tags.iter().enumerate() {
+            let tag = Some((*tag).to_owned());
+            if let Some(primary_tag) = self.primary_tags.remove(&tag) {
+                tags.remove(index);
+                return (tag, primary_tag);
+            }
+        }
+
+        (None, self.primary_tags.remove(&None).unwrap())
+    }
 }
 
-#[derive(Debug)]
-pub enum MetricError {
-    ExceededSecondaryTags,
-    FailedToSaveTags(std::io::Error)
+struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
+    storage: TStorage,
+    tags_index: SecondaryTagsIndex,
+    _phantom: PhantomData<E>
+}
+
+impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
+    pub fn new(base_path: &Path, block_duration: f64, datapoint_duration: f64) -> PrimaryTagMetric<TStorage, E> {
+        if !base_path.exists() {
+            std::fs::create_dir_all(base_path).unwrap();
+        }
+
+        PrimaryTagMetric {
+            storage: TStorage::new(
+                base_path,
+                (block_duration * TIME_SCALE as f64) as u64,
+                (datapoint_duration * TIME_SCALE as f64) as u64
+            ),
+            tags_index: SecondaryTagsIndex::new(base_path),
+            _phantom: PhantomData::default()
+        }
+    }
+
+    pub fn from_existing(base_path: &Path) -> PrimaryTagMetric<TStorage, E> {
+        PrimaryTagMetric {
+            storage: TStorage::from_existing(base_path),
+            tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json")).unwrap(),
+            _phantom: PhantomData::default()
+        }
+    }
 }
