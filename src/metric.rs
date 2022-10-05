@@ -56,7 +56,13 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
 
     pub fn from_existing(base_path: &Path) -> Metric<TStorage> {
         let mut primary_tags = FnvHashMap::default();
-        primary_tags.insert(None, PrimaryTagMetric::from_existing(&base_path.join("default")));
+
+        let primary_tag_values_content = std::fs::read_to_string(&base_path.join("primary_tags.json")).unwrap();
+        let primary_tag_values: Vec<Option<String>> = serde_json::from_str(&primary_tag_values_content).unwrap();
+        for primary_tag_value in primary_tag_values {
+            let primary_tag_base_path = primary_tag_value.as_ref().map(|value| base_path.join(value)).unwrap_or_else(|| base_path.join("default"));
+            primary_tags.insert(primary_tag_value, PrimaryTagMetric::from_existing(&primary_tag_base_path));
+        }
 
         Metric {
             base_path: base_path.to_owned(),
