@@ -283,6 +283,34 @@ pub fn extract_operations_in_windows<T: StreamingOperation<E>, F: Fn(Option<E>) 
         .collect()
 }
 
+pub fn merge_operations<T: StreamingOperation<E>, E>(mut streaming_operations: Vec<T>) -> T {
+    let mut streaming_operation = streaming_operations.remove(0);
+    for other_operation in streaming_operations.into_iter() {
+        streaming_operation.merge(other_operation);
+    }
+
+    streaming_operation
+}
+
+pub fn merge_windowing<T: StreamingOperation<E>, E>(mut primary_tags_windowing: Vec<MetricWindowing<T>>) -> MetricWindowing<T> {
+    let mut windowing = primary_tags_windowing.remove(0);
+    for current_windowing in primary_tags_windowing.into_iter() {
+        for (window_index, current_window) in current_windowing.into_windows().into_iter().enumerate() {
+            let merged_window = windowing.get(window_index);
+
+            if let Some(merged_window) = merged_window {
+                if let Some(current_window) = current_window {
+                    merged_window.merge(current_window);
+                }
+            } else {
+                *merged_window = current_window;
+            }
+        }
+    }
+
+    windowing
+}
+
 #[test]
 fn test_order_datapoints1() {
     let sub_blocks = vec![

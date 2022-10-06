@@ -43,14 +43,6 @@ impl TagsFilter {
             }
         }
     }
-
-    pub fn try_remove_tag(&mut self, tag: &str) {
-        match self {
-            TagsFilter::None => {}
-            TagsFilter::And(tags) => tags.retain(|current| current != tag),
-            TagsFilter::Or(tags) => tags.retain(|current| current != tag)
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]

@@ -112,11 +112,11 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
         let mut tags = tags.into_iter().cloned().collect::<Vec<_>>();
 
-        let (primary_tag_id, mut primary_tag) = self.extract_primary_tag(&mut tags);
+        let (primary_tag_key, mut primary_tag) = self.extract_primary_tag(&mut tags);
         let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
             Ok(secondary_tags) => secondary_tags,
             Err(err) => {
-                self.primary_tags.insert(primary_tag_id, primary_tag);
+                self.primary_tags.insert(primary_tag_key, primary_tag);
                 return Err(err);
             }
         };
@@ -157,7 +157,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
         }
 
-        self.primary_tags.insert(primary_tag_id, primary_tag);
+        self.primary_tags.insert(primary_tag_key, primary_tag);
         Ok(())
     }
 
@@ -204,8 +204,8 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         assert!(end_time > start_time);
 
         let mut streaming_operations = Vec::new();
-        for (primary_tag_value, primary_tag) in self.primary_tags.iter() {
-            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
+        for (primary_tag_key, primary_tag) in self.primary_tags.iter() {
+            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let stats = if require_statistics {
                         Some(
@@ -243,10 +243,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             return None;
         }
 
-        let mut streaming_operation = streaming_operations.remove(0);
-        for other_operation in streaming_operations.into_iter() {
-            streaming_operation.merge(other_operation);
-        }
+        let streaming_operation = metric_operations::merge_operations(streaming_operations);
 
         match query.output_transform {
             Some(operation) => operation.apply(streaming_operation.value()?),
@@ -298,7 +295,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
 
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
-        let mut primary_tag_windows = Vec::new();
+        let mut primary_tags_windowing = Vec::new();
         for (primary_tag_value, primary_tag) in self.primary_tags.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
@@ -349,29 +346,17 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
                         }
                     );
 
-                    primary_tag_windows.push(windowing);
+                    primary_tags_windowing.push(windowing);
                 }
             }
         }
 
-        if primary_tag_windows.is_empty() {
+        if primary_tags_windowing.is_empty() {
             return Vec::new();
         }
 
-        let mut windowing = primary_tag_windows.remove(0);
-        for current_windowing in primary_tag_windows.into_iter() {
-            for (window_index, current_window) in current_windowing.into_windows().into_iter().enumerate() {
-                let merged_window = windowing.get(window_index);
+        let windowing = metric_operations::merge_windowing(primary_tags_windowing);
 
-                if let Some(merged_window) = merged_window {
-                    if let Some(current_window) = current_window {
-                        merged_window.merge(current_window);
-                    }
-                } else {
-                    *merged_window = current_window;
-                }
-            }
-        }
         metric_operations::extract_operations_in_windows(
             windowing,
             |value| {
