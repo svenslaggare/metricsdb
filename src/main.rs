@@ -83,10 +83,10 @@ fn main() {
         println!("Max: {}", metric.max(Query::new(TimeRange::new(start_time, end_time))).unwrap());
     }
 
-    // {
-    //     let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
-    //     println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
-    // }
+    {
+        let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
+        println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
+    }
 
     {
         let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);

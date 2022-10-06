@@ -1,3 +1,4 @@
+use approx::abs_diff_eq;
 use crate::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
 
@@ -103,7 +104,7 @@ impl StreamingHistogram {
         }
     }
 
-    pub fn prints(&self) {
+    pub fn print(&self) {
         println!("Histogram:");
         for (bucket_index, count) in self.buckets.iter().enumerate() {
             println!("\t[{:.2}, {:.2}): {}", self.edge_from_index(bucket_index), self.edge_from_index(bucket_index + 1), count);
@@ -135,17 +136,25 @@ impl StreamingHistogram {
     fn edge_from_float_index(&self, index: f64) -> f64 {
         self.min + (index / (self.buckets.len()) as f64) * (self.max - self.min)
     }
-}
 
-impl StreamingOperation<f64> for StreamingHistogram {
-    fn add(&mut self, value: f64) {
+    fn auto_num_buckets(count: usize) -> usize {
+        (count as f64).sqrt().ceil() as usize
+    }
+
+    fn add_with_count(&mut self, value: f64, count: usize) {
         let bucket_float = (value - self.min) / (self.max - self.min);
         let bucket_index = (bucket_float * (self.buckets.len() - 0) as f64).floor() as usize;
 
         if bucket_index < self.buckets.len() {
-            self.total_count += 1;
-            self.buckets[bucket_index] += 1;
+            self.total_count += count;
+            self.buckets[bucket_index] += count;
         }
+    }
+}
+
+impl StreamingOperation<f64> for StreamingHistogram {
+    fn add(&mut self, value: f64) {
+        self.add_with_count(value, 1);
     }
 
     fn value(&self) -> Option<f64> {
@@ -153,13 +162,23 @@ impl StreamingOperation<f64> for StreamingHistogram {
     }
 
     fn merge(&mut self, other: Self) {
-        assert_eq!(self.min, other.min);
-        assert_eq!(self.max, other.max);
-        assert_eq!(self.buckets.len(), other.buckets.len());
+        let mut new_histogram = StreamingHistogram::new(
+            self.min.min(other.min),
+            self.max.max(other.max),
+            StreamingHistogram::auto_num_buckets(self.total_count + other.total_count)
+        );
 
-        for (bucket_index, count) in other.buckets.iter().enumerate() {
-            self.buckets[bucket_index] += count;
-        }
+        let mut add_histogram = |histogram: &StreamingHistogram| {
+            for (window_index, &count) in histogram.buckets.iter().enumerate() {
+                let center = histogram.edge_from_float_index(window_index as f64 + 0.5);
+                new_histogram.add_with_count(center, count);
+            }
+        };
+
+        add_histogram(self);
+        add_histogram(&other);
+
+        *self = new_histogram;
     }
 }
 
@@ -177,7 +196,7 @@ impl StreamingApproxPercentile {
     }
 
     pub fn from_stats(stats: &TimeRangeStatistics<f64>, percentile: i32) -> StreamingApproxPercentile {
-        StreamingApproxPercentile::new(stats.min(), stats.max(), (stats.count as f64).sqrt().ceil() as usize, percentile)
+        StreamingApproxPercentile::new(stats.min(), stats.max(), StreamingHistogram::auto_num_buckets(stats.count), percentile)
     }
 }
 
@@ -314,6 +333,29 @@ fn test_streaming_histogram3() {
     }
 
     assert_eq!(Some(991.0), streaming.percentile(99));
+}
+
+#[test]
+fn test_merge_streaming_histogram3() {
+    let mut streaming_full = StreamingHistogram::new(1.0, 2001.0, 120);
+
+    let mut streaming1 = StreamingHistogram::new(1.0, 1001.0, 50);
+    let values = (1..1001).collect::<Vec<_>>();
+    for value in values {
+        streaming1.add(value as f64);
+        streaming_full.add(value as f64);
+    }
+
+    let mut streaming2 = StreamingHistogram::new(1.0, 2001.0, 70);
+    let values = (1..2001).collect::<Vec<_>>();
+    for value in values {
+        streaming2.add(value as f64);
+        streaming_full.add(value as f64);
+    }
+
+    streaming1.merge(streaming2);
+
+    abs_diff_eq!(streaming_full.percentile(99).unwrap_or(0.0), streaming1.percentile(99).unwrap_or(100.0), epsilon = 10.0);
 }
 
 #[test]
