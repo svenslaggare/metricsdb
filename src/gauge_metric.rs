@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::metric::{MetricResult, PrimaryTag, PrimaryTagsStorage};
 use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
+use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::{metric_operations, Query};
 use crate::model::{Datapoint, Time, TIME_SCALE};
 use crate::storage::file::MetricStorageFile;
@@ -96,6 +96,10 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.simple_operation::<StreamingAverage<f64>>(query)
     }
 
+    pub fn sym(&self, query: Query) -> Option<f64> {
+        self.simple_operation::<StreamingSum<f64>>(query)
+    }
+
     pub fn max(&self, query: Query) -> Option<f64> {
         self.simple_operation::<StreamingMax<f64>>(query)
     }
@@ -183,6 +187,10 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
         self.simple_operation_in_window::<StreamingAverage<f64>>(query, duration)
+    }
+
+    pub fn sum_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+        self.simple_operation_in_window::<StreamingSum<f64>>(query, duration)
     }
 
     pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {

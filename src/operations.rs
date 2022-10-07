@@ -8,6 +8,38 @@ pub trait StreamingOperation<T> {
     fn merge(&mut self, other: Self);
 }
 
+pub struct StreamingSum<T> {
+    sum: T
+}
+
+impl<T: Default> StreamingSum<T> {
+    pub fn new() -> StreamingSum<T> {
+        StreamingSum {
+            sum: Default::default()
+        }
+    }
+}
+
+impl<T: Clone + Default + std::ops::AddAssign> StreamingOperation<T> for StreamingSum<T> {
+    fn add(&mut self, value: T) {
+        self.sum += value;
+    }
+
+    fn value(&self) -> Option<T> {
+        Some(self.sum.clone())
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.sum += other.sum;
+    }
+}
+
+impl<T: Clone + Default + std::ops::AddAssign> Default for StreamingSum<T> {
+    fn default() -> Self {
+        StreamingSum::new()
+    }
+}
+
 pub struct StreamingAverage<T> {
     sum: T,
     count: i32

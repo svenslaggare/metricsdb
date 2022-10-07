@@ -59,12 +59,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     }
 
     pub fn from_existing(base_path: &Path) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
-        let primary_tags = PrimaryTagsSerialization::new(base_path).load()?;
-
         Ok(
             PrimaryTagsStorage {
                 base_path: base_path.to_owned(),
-                tags: primary_tags
+                tags: PrimaryTagsSerialization::new(base_path).load()?
             }
         )
     }
