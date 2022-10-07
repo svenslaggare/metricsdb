@@ -5,10 +5,9 @@ use serde::Deserialize;
 
 use crate::gauge_metric::{DefaultGaugeMetric};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use crate::metric::PrimaryTag;
 use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
-use crate::tags::{TagsFilter};
+use crate::tags::{PrimaryTag, TagsFilter};
 
 mod helpers;
 mod memory_file;

@@ -4,7 +4,13 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 
 use crate::{Tags};
-use crate::metric::{MetricError, MetricResult, PrimaryTag};
+use crate::metric::{MetricError, MetricResult};
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum PrimaryTag {
+    Default,
+    Named(String)
+}
 
 #[derive(Debug, Clone)]
 pub enum TagsFilter {

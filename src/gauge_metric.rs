@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::{MetricResult, PrimaryTag, PrimaryTagsStorage};
+use crate::metric::{MetricResult, PrimaryTagsStorage};
 use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
-use crate::{metric_operations, Query};
+use crate::{metric_operations, PrimaryTag, Query};
 use crate::model::{Datapoint, Time, TIME_SCALE};
 use crate::storage::file::MetricStorageFile;
 use crate::storage::MetricStorage;

@@ -1,14 +1,12 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use serde::{Serialize, Deserialize};
-
 use fnv::FnvHashMap;
 
 use crate::memory_file::MemoryFileError;
 use crate::model::TIME_SCALE;
 use crate::storage::MetricStorage;
-use crate::tags::SecondaryTagsIndex;
+use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
 // pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
 // pub const DEFAULT_BLOCK_DURATION: f64 = 1.0;
@@ -113,12 +111,6 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
         (PrimaryTag::Default, self.tags.remove(&PrimaryTag::Default).unwrap())
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum PrimaryTag {
-    Default,
-    Named(String)
 }
 
 pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
