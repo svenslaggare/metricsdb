@@ -406,6 +406,42 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     }
 }
 
+struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
+    storage: TStorage,
+    tags_index: SecondaryTagsIndex,
+    _phantom: PhantomData<E>
+}
+
+impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
+    pub fn new(base_path: &Path, block_duration: f64, datapoint_duration: f64) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
+        if !base_path.exists() {
+            std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
+        }
+
+        Ok(
+            PrimaryTagMetric {
+                storage: TStorage::new(
+                    base_path,
+                    (block_duration * TIME_SCALE as f64) as u64,
+                    (datapoint_duration * TIME_SCALE as f64) as u64
+                )?,
+                tags_index: SecondaryTagsIndex::new(base_path),
+                _phantom: PhantomData::default()
+            }
+        )
+    }
+
+    pub fn from_existing(base_path: &Path) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
+        Ok(
+            PrimaryTagMetric {
+                storage: TStorage::from_existing(base_path)?,
+                tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json")).map_err(|err| MetricError::FailedToLoadSecondaryTag(err))?,
+                _phantom: PhantomData::default()
+            }
+        )
+    }
+}
+
 struct PrimaryTagsSerialization {
     base_path: PathBuf,
     index_path: PathBuf
@@ -449,41 +485,5 @@ impl PrimaryTagsSerialization {
         }
 
         Ok(primary_tags)
-    }
-}
-
-struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
-    storage: TStorage,
-    tags_index: SecondaryTagsIndex,
-    _phantom: PhantomData<E>
-}
-
-impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
-    pub fn new(base_path: &Path, block_duration: f64, datapoint_duration: f64) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
-        if !base_path.exists() {
-            std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
-        }
-
-        Ok(
-            PrimaryTagMetric {
-                storage: TStorage::new(
-                    base_path,
-                    (block_duration * TIME_SCALE as f64) as u64,
-                    (datapoint_duration * TIME_SCALE as f64) as u64
-                )?,
-                tags_index: SecondaryTagsIndex::new(base_path),
-                _phantom: PhantomData::default()
-            }
-        )
-    }
-
-    pub fn from_existing(base_path: &Path) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
-        Ok(
-            PrimaryTagMetric {
-                storage: TStorage::from_existing(base_path)?,
-                tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json")).map_err(|err| MetricError::FailedToLoadSecondaryTag(err))?,
-                _phantom: PhantomData::default()
-            }
-        )
     }
 }
