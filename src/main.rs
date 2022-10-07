@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::metric::{DefaultMetric};
+use crate::gauge_metric::{DefaultGaugeMetric};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
@@ -12,11 +12,12 @@ use crate::tags::{TagsFilter};
 mod helpers;
 mod memory_file;
 mod storage;
-mod metric;
 mod metric_operations;
 mod operations;
 mod model;
 mod tags;
+mod metric;
+mod gauge_metric;
 
 #[derive(Deserialize)]
 struct SampleData {
@@ -31,7 +32,7 @@ fn main() {
 
     println!("n: {}", data.times.len());
 
-    let mut metric = DefaultMetric::new(Path::new("metric")).unwrap();
+    let mut metric = DefaultGaugeMetric::new(Path::new("metric")).unwrap();
     metric.add_primary_tag(Some("tag:T1".to_owned())).unwrap();
     metric.add_primary_tag(Some("tag:T2".to_owned())).unwrap();
 
@@ -40,13 +41,13 @@ fn main() {
         for index in 0..data.times.len() {
             // let tags = &[];
             let tags = &[tags_list[(index % 2)]];
-            metric.gauge(data.times[index], data.values[index] as f64, tags).unwrap();
+            metric.add(data.times[index], data.values[index] as f64, tags).unwrap();
         }
     }
 
     metric.stats();
 
-    // let mut metric = DefaultMetric::from_existing(Path::new("metric")).unwrap();
+    // let mut metric = DefaultGaugeMetric::from_existing(Path::new("metric")).unwrap();
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
