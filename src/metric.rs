@@ -44,79 +44,42 @@ impl From<MemoryFileError> for MetricError {
 }
 
 pub struct Metric<TStorage: MetricStorage<f32>> {
-    base_path: PathBuf,
-    primary_tags: FnvHashMap<Option<String>, PrimaryTagMetric<TStorage, f32>>
+    primary_tags_storage: PrimaryTagsStorage<TStorage, f32>
 }
 
 impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     pub fn new(base_path: &Path) -> MetricResult<Metric<TStorage>> {
-        if !base_path.exists() {
-            std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
-        }
-
-        let mut metric = Metric {
-            base_path: base_path.to_owned(),
-            primary_tags: FnvHashMap::default()
-        };
-        metric.add_primary_tag(None)?;
-
-        Ok(metric)
+        Ok(
+            Metric {
+                primary_tags_storage: PrimaryTagsStorage::new(base_path)?
+            }
+        )
     }
 
     pub fn from_existing(base_path: &Path) -> MetricResult<Metric<TStorage>> {
-        let primary_tags = PrimaryTagsSerialization::new(base_path).load()?;
-
         Ok(
             Metric {
-                base_path: base_path.to_owned(),
-                primary_tags
+                primary_tags_storage: PrimaryTagsStorage::from_existing(base_path)?
             }
         )
     }
 
     pub fn stats(&self) {
-        for (tag, primary_tag) in self.primary_tags.iter() {
-            println!("Tag: {:?}", tag);
-            println!("Num blocks: {}", primary_tag.storage.len());
-            let mut num_datapoints = 0;
-            let mut max_datapoints_in_block = 0;
-            for block_index in 0..primary_tag.storage.len() {
-                if let Some(iterator) = primary_tag.storage.block_datapoints(block_index) {
-                    for (_, datapoints) in iterator {
-                        let block_length = datapoints.len();
-                        num_datapoints += block_length;
-                        max_datapoints_in_block = max_datapoints_in_block.max(block_length);
-                    }
-                }
-            }
-            println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
-        }
+        self.primary_tags_storage.stats();
     }
 
     pub fn add_primary_tag(&mut self, tag: Option<String>) -> MetricResult<()> {
-        if !self.primary_tags.contains_key(&tag) {
-            let path = tag.as_ref().map(|tag| self.base_path.join(tag)).unwrap_or_else(|| self.base_path.join("default"));
-            let primary_tag = PrimaryTagMetric::new(&path, DEFAULT_BLOCK_DURATION, DEFAULT_DATAPOINT_DURATION)?;
-            primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
-            self.primary_tags.insert(tag, primary_tag);
-            self.save_primary_tags()?;
-        }
-
-        Ok(())
-    }
-
-    fn save_primary_tags(&self) -> MetricResult<()> {
-        PrimaryTagsSerialization::new(&self.base_path).save(&self.primary_tags)
+        self.primary_tags_storage.add_primary_tag(tag)
     }
 
     pub fn gauge(&mut self, time: f64, value: f64, tags: &[&str]) -> MetricResult<()> {
         let mut tags = tags.into_iter().cloned().collect::<Vec<_>>();
 
-        let (primary_tag_key, mut primary_tag) = self.extract_primary_tag(&mut tags);
+        let (primary_tag_key, mut primary_tag) = self.primary_tags_storage.extract_primary_tag(&mut tags);
         let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
             Ok(secondary_tags) => secondary_tags,
             Err(err) => {
-                self.primary_tags.insert(primary_tag_key, primary_tag);
+                self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
                 return Err(err);
             }
         };
@@ -157,7 +120,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
         }
 
-        self.primary_tags.insert(primary_tag_key, primary_tag);
+        self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
         Ok(())
     }
 
@@ -166,7 +129,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
     }
 
     pub fn max(&self, query: Query) -> Option<f64> {
-        self.simple_operation::<StreamingMax::<f64>>(query)
+        self.simple_operation::<StreamingMax<f64>>(query)
     }
 
     fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> Option<f64> {
@@ -204,7 +167,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         assert!(end_time > start_time);
 
         let mut streaming_operations = Vec::new();
-        for (primary_tag_key, primary_tag) in self.primary_tags.iter() {
+        for (primary_tag_key, primary_tag) in self.primary_tags_storage.tags.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let stats = if require_statistics {
@@ -295,7 +258,7 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
         let mut primary_tags_windowing = Vec::new();
-        for (primary_tag_value, primary_tag) in self.primary_tags.iter() {
+        for (primary_tag_value, primary_tag) in self.primary_tags_storage.tags.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let mut windowing = MetricWindowing::new(start_time, end_time, duration);
@@ -366,17 +329,80 @@ impl<TStorage: MetricStorage<f32>> Metric<TStorage> {
             }
         )
     }
+}
 
-    fn extract_primary_tag<'a>(&'a mut self, tags: &mut Vec<&str>) -> (Option<String>, PrimaryTagMetric<TStorage, f32>) {
+struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
+    base_path: PathBuf,
+    tags: FnvHashMap<Option<String>, PrimaryTagMetric<TStorage, E>>
+}
+
+impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
+    pub fn new(base_path: &Path) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
+        if !base_path.exists() {
+            std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
+        }
+
+        let mut primary_tags_storage = PrimaryTagsStorage {
+            base_path: base_path.to_owned(),
+            tags: FnvHashMap::default()
+        };
+        primary_tags_storage.add_primary_tag(None)?;
+
+        Ok(primary_tags_storage)
+    }
+
+    pub fn from_existing(base_path: &Path) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
+        let primary_tags = PrimaryTagsSerialization::new(base_path).load()?;
+
+        Ok(
+            PrimaryTagsStorage {
+                base_path: base_path.to_owned(),
+                tags: primary_tags
+            }
+        )
+    }
+
+    pub fn stats(&self) {
+        for (tag, primary_tag) in self.tags.iter() {
+            println!("Tag: {:?}", tag);
+            println!("Num blocks: {}", primary_tag.storage.len());
+            let mut num_datapoints = 0;
+            let mut max_datapoints_in_block = 0;
+            for block_index in 0..primary_tag.storage.len() {
+                if let Some(iterator) = primary_tag.storage.block_datapoints(block_index) {
+                    for (_, datapoints) in iterator {
+                        let block_length = datapoints.len();
+                        num_datapoints += block_length;
+                        max_datapoints_in_block = max_datapoints_in_block.max(block_length);
+                    }
+                }
+            }
+            println!("Num datapoints: {}, max datapoints: {}", num_datapoints, max_datapoints_in_block);
+        }
+    }
+
+    pub fn add_primary_tag(&mut self, tag: Option<String>) -> MetricResult<()> {
+        if !self.tags.contains_key(&tag) {
+            let path = tag.as_ref().map(|tag| self.base_path.join(tag)).unwrap_or_else(|| self.base_path.join("default"));
+            let primary_tag = PrimaryTagMetric::new(&path, DEFAULT_BLOCK_DURATION, DEFAULT_DATAPOINT_DURATION)?;
+            primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
+            self.tags.insert(tag, primary_tag);
+            PrimaryTagsSerialization::new(&self.base_path).save(&self.tags)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn extract_primary_tag<'a>(&'a mut self, tags: &mut Vec<&str>) -> (Option<String>, PrimaryTagMetric<TStorage, E>) {
         for (index, tag) in tags.iter().enumerate() {
             let tag = Some((*tag).to_owned());
-            if let Some(primary_tag) = self.primary_tags.remove(&tag) {
+            if let Some(primary_tag) = self.tags.remove(&tag) {
                 tags.remove(index);
                 return (tag, primary_tag);
             }
         }
 
-        (None, self.primary_tags.remove(&None).unwrap())
+        (None, self.tags.remove(&None).unwrap())
     }
 }
 
