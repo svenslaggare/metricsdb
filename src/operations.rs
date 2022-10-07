@@ -1,4 +1,3 @@
-use approx::abs_diff_eq;
 use crate::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
 
@@ -337,6 +336,8 @@ fn test_streaming_histogram3() {
 
 #[test]
 fn test_merge_streaming_histogram3() {
+    use approx::abs_diff_eq;
+
     let mut streaming_full = StreamingHistogram::new(1.0, 2001.0, 120);
 
     let mut streaming1 = StreamingHistogram::new(1.0, 1001.0, 50);

@@ -1,10 +1,11 @@
 use std::path::Path;
+use crate::metric::MetricError;
 
 use crate::model::{Datapoint, Tags, Time};
 
 pub trait MetricStorage<E: Copy> {
-    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Self;
-    fn from_existing(base_path: &Path) -> Self;
+    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Result<Self, MetricError> where Self: Sized;
+    fn from_existing(base_path: &Path) -> Result<Self, MetricError> where Self: Sized;
 
     fn block_duration(&self) -> u64;
     fn datapoint_duration(&self) -> u64;

@@ -31,9 +31,9 @@ fn main() {
 
     println!("n: {}", data.times.len());
 
-    let mut metric = DefaultMetric::new(Path::new("metric"));
-    metric.add_primary_tag("tag:T1");
-    metric.add_primary_tag("tag:T2");
+    let mut metric = DefaultMetric::new(Path::new("metric")).unwrap();
+    metric.add_primary_tag(Some("tag:T1".to_owned())).unwrap();
+    metric.add_primary_tag(Some("tag:T2".to_owned())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
@@ -46,7 +46,7 @@ fn main() {
 
     metric.stats();
 
-    // let mut metric = DefaultMetric::from_existing(Path::new("metric"));
+    // let mut metric = DefaultMetric::from_existing(Path::new("metric")).unwrap();
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;

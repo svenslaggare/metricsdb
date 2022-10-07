@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::memory_file::MemoryFile;
+use crate::metric::MetricError;
 use crate::model::{Datapoint, Time};
 use crate::storage::MetricStorage;
 use crate::Tags;
@@ -110,23 +111,25 @@ impl<E: Copy> MetricStorageFile<E> {
 }
 
 impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
-    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Self {
+    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Result<Self, MetricError> {
         let mut storage = MetricStorageFile {
-            storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true).unwrap(),
-            index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true).unwrap(),
+            storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true)?,
+            index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true)?,
             _phantom: Default::default()
         };
 
         storage.initialize(block_duration, datapoint_duration);
-        storage
+        Ok(storage)
     }
 
-    fn from_existing(base_path: &Path) -> Self {
-        MetricStorageFile {
-            storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false).unwrap(),
-            index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false).unwrap(),
-            _phantom: Default::default()
-        }
+    fn from_existing(base_path: &Path) -> Result<Self, MetricError> {
+        Ok(
+            MetricStorageFile {
+                storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false)?,
+                index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false)?,
+                _phantom: Default::default()
+            }
+        )
     }
 
     fn block_duration(&self) -> u64 {

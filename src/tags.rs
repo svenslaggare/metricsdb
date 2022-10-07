@@ -66,7 +66,7 @@ impl SecondaryTagsIndex {
         }
 
         if changed {
-            self.save().map_err(|err| MetricError::FailedToSaveTags(err))?;
+            self.save().map_err(|err| MetricError::FailedToSaveSecondaryTag(err))?;
         }
 
         self.tags_pattern(tags.iter()).ok_or_else(|| MetricError::ExceededSecondaryTags)
