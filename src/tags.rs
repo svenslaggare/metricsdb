@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 
 use crate::{Tags};
-use crate::metric::{MetricError, MetricResult};
+use crate::metric::{MetricError, MetricResult, PrimaryTag};
 
 #[derive(Debug, Clone)]
 pub enum TagsFilter {
@@ -14,7 +14,7 @@ pub enum TagsFilter {
 }
 
 impl TagsFilter {
-    pub fn apply(&self, tags_index: &SecondaryTagsIndex, primary_tag: &Option<String>) -> Option<SecondaryTagsFilter> {
+    pub fn apply(&self, tags_index: &SecondaryTagsIndex, primary_tag: &PrimaryTag) -> Option<SecondaryTagsFilter> {
         fn remove_tag<'a>(tags: &'a Vec<String>, primary_tag: &'a str) -> impl Iterator<Item=&'a String> {
             tags.iter().filter(move |tag| *tag != primary_tag)
         }
@@ -23,22 +23,22 @@ impl TagsFilter {
             TagsFilter::None => Some(SecondaryTagsFilter::None),
             TagsFilter::And(tags) => {
                 match primary_tag {
-                    Some(primary_tag) => {
+                    PrimaryTag::Named(primary_tag) => {
                         if tags.contains(primary_tag) {
                             Some(SecondaryTagsFilter::And(tags_index.tags_pattern(remove_tag(tags, primary_tag))?))
                         } else {
                             None
                         }
                     }
-                    None => {
+                    PrimaryTag::Default => {
                         Some(SecondaryTagsFilter::And(tags_index.tags_pattern(tags.iter())?))
                     }
                 }
             }
             TagsFilter::Or(tags) => {
                 match primary_tag {
-                    Some(primary_tag) => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?)),
-                    None => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
+                    PrimaryTag::Named(primary_tag) => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?)),
+                    PrimaryTag::Default => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
                 }
             }
         }

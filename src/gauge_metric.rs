@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::{MetricResult, PrimaryTagsStorage};
+use crate::metric::{MetricResult, PrimaryTag, PrimaryTagsStorage};
 use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingTransformOperation};
 use crate::{metric_operations, Query};
@@ -36,7 +36,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.primary_tags_storage.stats();
     }
 
-    pub fn add_primary_tag(&mut self, tag: Option<String>) -> MetricResult<()> {
+    pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         self.primary_tags_storage.add_primary_tag(tag)
     }
 

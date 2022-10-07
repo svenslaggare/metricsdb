@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::gauge_metric::{DefaultGaugeMetric};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
+use crate::metric::PrimaryTag;
 use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
 use crate::tags::{TagsFilter};
@@ -33,8 +34,8 @@ fn main() {
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultGaugeMetric::new(Path::new("metric")).unwrap();
-    metric.add_primary_tag(Some("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(Some("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
