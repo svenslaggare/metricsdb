@@ -80,12 +80,12 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                     }
                 }
 
-                primary_tag.storage.add_datapoint(secondary_tags, datapoint);
+                primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
             } else {
-                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
+                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
             }
         } else {
-            primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint);
+            primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
         }
 
         self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);

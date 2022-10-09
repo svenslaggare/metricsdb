@@ -170,15 +170,15 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
         }
     }
 
-    fn create_block(&mut self, time: Time) {
+    fn create_block(&mut self, time: Time) -> Result<(), MetricError> {
         unsafe {
             if self.has_blocks() {
-                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false).unwrap();
+                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
                 (*self.header_mut()).active_block_start += (*self.active_block()).size;
                 (*self.header_mut()).active_block_index += 1;
             }
 
-            self.storage_file.try_grow_file(std::mem::size_of::<Block<E>>()).unwrap();
+            self.storage_file.try_grow_file(std::mem::size_of::<Block<E>>())?;
             *self.active_block_mut() = Block {
                 size: std::mem::size_of::<Block<E>>(),
                 start_time: time,
@@ -190,19 +190,23 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             };
             (*self.header_mut()).num_blocks += 1;
 
-            self.index_file.try_grow_file(std::mem::size_of::<usize>()).unwrap();
+            self.index_file.try_grow_file(std::mem::size_of::<usize>())?;
             *self.index_mut().add((*self.header()).active_block_index) = (*self.header()).active_block_start;
         }
+
+        Ok(())
     }
 
-    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) {
+    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError> {
         unsafe {
             let active_block = self.active_block_mut();
             (*active_block).end_time = (*active_block).end_time.max((*active_block).start_time + datapoint.time_offset as Time);
 
-            let sub_block = self.allocate_sub_block_for_insertion(active_block, tags).unwrap();
+            let sub_block = self.allocate_sub_block_for_insertion(active_block, tags).ok_or_else(|| MetricError::FailedToAllocateSubBlock)?;
             sub_block.add_datapoint(active_block, datapoint);
         }
+
+        Ok(())
     }
 
     fn visit_datapoints<F: FnMut(Tags, &[Datapoint<E>])>(&self, block_index: usize, mut apply: F) {

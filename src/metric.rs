@@ -21,18 +21,19 @@ pub type MetricResult<T> = Result<T, MetricError>;
 #[derive(Debug)]
 pub enum MetricError {
     FailedToCreateBaseDir(std::io::Error),
-    MemoryMapError(MemoryFileError),
+    MemoryFileError(MemoryFileError),
     ExceededSecondaryTags,
     FailedToSavePrimaryTag(std::io::Error),
     FailedToLoadPrimaryTag(std::io::Error),
     FailedToSaveSecondaryTag(std::io::Error),
     FailedToLoadSecondaryTag(std::io::Error),
-    FailedToCreateMetric(std::io::Error)
+    FailedToCreateMetric(std::io::Error),
+    FailedToAllocateSubBlock
 }
 
 impl From<MemoryFileError> for MetricError {
     fn from(err: MemoryFileError) -> Self {
-        MetricError::MemoryMapError(err)
+        MetricError::MemoryFileError(err)
     }
 }
 

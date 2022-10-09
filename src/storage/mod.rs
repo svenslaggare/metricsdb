@@ -18,12 +18,13 @@ pub trait MetricStorage<E: Copy> {
     fn active_block_start_time(&self) -> Option<Time>;
     fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint<E>]>;
 
-    fn create_block(&mut self, time: Time);
-    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>);
+    fn create_block(&mut self, time: Time) -> Result<(), MetricError>;
+    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError>;
 
-    fn create_block_with_datapoint(&mut self, time: Time, tags: Tags, datapoint: Datapoint<E>) {
-        self.create_block(time);
-        self.add_datapoint(tags, datapoint);
+    fn create_block_with_datapoint(&mut self, time: Time, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError> {
+        self.create_block(time)?;
+        self.add_datapoint(tags, datapoint)?;
+        Ok(())
     }
 
     fn visit_datapoints<F: FnMut(Tags, &[Datapoint<E>])>(&self, block_index: usize, apply: F);
