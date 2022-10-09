@@ -1,4 +1,5 @@
 use crate::{TransformOperation};
+use crate::storage::memory_file::MemoryFileError;
 use crate::tags::{TagsFilter};
 
 pub type Time = u64;
@@ -94,5 +95,26 @@ impl MinMax for f32 {
 
     fn max(&self, other: Self) -> Self {
         f32::max(*self, other)
+    }
+}
+
+pub type MetricResult<T> = Result<T, MetricError>;
+
+#[derive(Debug)]
+pub enum MetricError {
+    FailedToCreateBaseDir(std::io::Error),
+    MemoryFileError(MemoryFileError),
+    ExceededSecondaryTags,
+    FailedToSavePrimaryTag(std::io::Error),
+    FailedToLoadPrimaryTag(std::io::Error),
+    FailedToSaveSecondaryTag(std::io::Error),
+    FailedToLoadSecondaryTag(std::io::Error),
+    FailedToCreateMetric(std::io::Error),
+    FailedToAllocateSubBlock
+}
+
+impl From<MemoryFileError> for MetricError {
+    fn from(err: MemoryFileError) -> Self {
+        MetricError::MemoryFileError(err)
     }
 }

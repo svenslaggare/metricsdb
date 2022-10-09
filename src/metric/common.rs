@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fnv::FnvHashMap;
 
-use crate::storage::memory_file::MemoryFileError;
-use crate::model::TIME_SCALE;
+use crate::model::{MetricError, MetricResult, TIME_SCALE};
 use crate::storage::MetricStorage;
 use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
@@ -15,27 +14,6 @@ pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 // pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.5;
-
-pub type MetricResult<T> = Result<T, MetricError>;
-
-#[derive(Debug)]
-pub enum MetricError {
-    FailedToCreateBaseDir(std::io::Error),
-    MemoryFileError(MemoryFileError),
-    ExceededSecondaryTags,
-    FailedToSavePrimaryTag(std::io::Error),
-    FailedToLoadPrimaryTag(std::io::Error),
-    FailedToSaveSecondaryTag(std::io::Error),
-    FailedToLoadSecondaryTag(std::io::Error),
-    FailedToCreateMetric(std::io::Error),
-    FailedToAllocateSubBlock
-}
-
-impl From<MemoryFileError> for MetricError {
-    fn from(err: MemoryFileError) -> Self {
-        MetricError::MemoryFileError(err)
-    }
-}
 
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,

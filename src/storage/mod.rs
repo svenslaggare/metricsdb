@@ -1,11 +1,10 @@
 use std::path::Path;
-use crate::metric::common::MetricError;
 
-use crate::model::{Datapoint, Tags, Time};
+use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 
 pub trait MetricStorage<E: Copy> {
-    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Result<Self, MetricError> where Self: Sized;
-    fn from_existing(base_path: &Path) -> Result<Self, MetricError> where Self: Sized;
+    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> MetricResult<Self> where Self: Sized;
+    fn from_existing(base_path: &Path) -> MetricResult<Self> where Self: Sized;
 
     fn block_duration(&self) -> u64;
     fn datapoint_duration(&self) -> u64;
@@ -19,9 +18,9 @@ pub trait MetricStorage<E: Copy> {
     fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint<E>]>;
 
     fn create_block(&mut self, time: Time) -> Result<(), MetricError>;
-    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError>;
+    fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) -> MetricResult<()>;
 
-    fn create_block_with_datapoint(&mut self, time: Time, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError> {
+    fn create_block_with_datapoint(&mut self, time: Time, tags: Tags, datapoint: Datapoint<E>) -> MetricResult<()> {
         self.create_block(time)?;
         self.add_datapoint(tags, datapoint)?;
         Ok(())

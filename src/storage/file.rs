@@ -2,8 +2,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::storage::memory_file::MemoryFile;
-use crate::metric::common::MetricError;
-use crate::model::{Datapoint, Time};
+use crate::model::{Datapoint, MetricError, Time};
 use crate::storage::MetricStorage;
 use crate::Tags;
 
