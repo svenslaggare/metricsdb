@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fnv::FnvHashMap;
 
-use crate::memory_file::MemoryFileError;
+use crate::storage::memory_file::MemoryFileError;
 use crate::model::TIME_SCALE;
 use crate::storage::MetricStorage;
 use crate::tags::{PrimaryTag, SecondaryTagsIndex};

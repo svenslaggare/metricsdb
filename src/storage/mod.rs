@@ -31,3 +31,4 @@ pub trait MetricStorage<E: Copy> {
 }
 
 pub mod file;
+pub mod memory_file;

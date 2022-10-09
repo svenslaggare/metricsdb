@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::path::Path;
 
-use crate::memory_file::MemoryFile;
+use crate::storage::memory_file::MemoryFile;
 use crate::metric::MetricError;
 use crate::model::{Datapoint, Time};
 use crate::storage::MetricStorage;
@@ -173,6 +173,7 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
     fn create_block(&mut self, time: Time) {
         unsafe {
             if self.has_blocks() {
+                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false).unwrap();
                 (*self.header_mut()).active_block_start += (*self.active_block()).size;
                 (*self.header_mut()).active_block_index += 1;
             }
@@ -184,7 +185,7 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
                 end_time: time,
                 num_sub_blocks: 0,
                 next_sub_block_offset: 0,
-                sub_blocks: [Default::default(); 100],
+                sub_blocks: [Default::default(); NUM_SUB_BLOCKS],
                 _phantom: Default::default()
             };
             (*self.header_mut()).num_blocks += 1;
@@ -266,13 +267,15 @@ struct Header {
     active_block_start: usize,
 }
 
+const NUM_SUB_BLOCKS: usize = 100;
+
 struct Block<E: Copy> {
     size: usize,
     start_time: Time,
     end_time: Time,
     num_sub_blocks: usize,
     next_sub_block_offset: usize,
-    sub_blocks: [SubBlock<E>; 100],
+    sub_blocks: [SubBlock<E>; NUM_SUB_BLOCKS],
     _phantom: PhantomData<E>
 }
 

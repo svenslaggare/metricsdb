@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub enum MemoryFileError {
     FailedToMap,
+    FailedToSync,
     IO(std::io::Error)
 }
 
@@ -89,6 +90,25 @@ impl MemoryFile {
         }
 
         Ok(())
+    }
+
+    pub fn sync(&mut self, address: *const u8, size: usize, is_async: bool) -> Result<(), MemoryFileError> {
+        unsafe {
+            // The address that we invoke msync with must be aligned to pages
+            const PAGE_SIZE: usize = 4096;
+            let address = address as usize;
+            let page_address = (address / PAGE_SIZE) * PAGE_SIZE;
+            let end_address = address + size;
+            let size = end_address - page_address;
+            let address = page_address;
+
+            let result = libc::msync(address as *mut _, size, if is_async {libc::MS_ASYNC} else {libc::MS_SYNC});
+            if result == 0 {
+                Ok(())
+            } else {
+                Err(MemoryFileError::FailedToSync)
+            }
+        }
     }
 
     pub fn bytes(&self) -> &[u8] {

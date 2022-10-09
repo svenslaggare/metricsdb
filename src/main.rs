@@ -3,14 +3,13 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::gauge_metric::{DefaultGaugeMetric};
+use crate::gauge_metric::DefaultGaugeMetric;
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
 use crate::operations::TransformOperation;
 use crate::tags::{PrimaryTag, TagsFilter};
 
 mod helpers;
-mod memory_file;
 mod storage;
 mod metric_operations;
 mod operations;
