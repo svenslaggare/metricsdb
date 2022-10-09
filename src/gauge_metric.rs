@@ -141,7 +141,6 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         let mut streaming_operations = Vec::new();
         for (primary_tag_key, primary_tag) in self.primary_tags_storage.tags.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
-                println!("{:?}", tags_filter);
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let stats = if require_statistics {
                         Some(
