@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 
 use crate::{Tags};
-use crate::metric::{MetricError, MetricResult};
+use crate::metric::common::{MetricError, MetricResult};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum PrimaryTag {

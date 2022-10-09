@@ -1,5 +1,5 @@
 /target
 *.json
-metric
+test_metric
 .idea
 output.png

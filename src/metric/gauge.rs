@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::{MetricResult, PrimaryTagsStorage};
+use crate::metric::common::{MetricResult, PrimaryTagsStorage};
 use crate::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::{metric_operations, PrimaryTag, Query};

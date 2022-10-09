@@ -1,5 +1,5 @@
 use std::path::Path;
-use crate::metric::MetricError;
+use crate::metric::common::MetricError;
 
 use crate::model::{Datapoint, Tags, Time};
 
