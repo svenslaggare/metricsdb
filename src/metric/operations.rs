@@ -1,4 +1,4 @@
-use crate::metric_operations::TimeRangeStatistics;
+use crate::metric::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
 
 pub trait StreamingOperation<T> {

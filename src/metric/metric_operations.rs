@@ -1,5 +1,5 @@
 use crate::model::{Datapoint, MinMax, Time, TIME_SCALE};
-use crate::operations::StreamingOperation;
+use crate::metric::operations::StreamingOperation;
 use crate::storage::MetricStorage;
 use crate::tags::SecondaryTagsFilter;
 

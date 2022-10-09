@@ -6,13 +6,11 @@ use serde::Deserialize;
 use metric::gauge::DefaultGaugeMetric;
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
-use crate::operations::TransformOperation;
+use metric::operations::TransformOperation;
 use crate::tags::{PrimaryTag, TagsFilter};
 
 mod helpers;
 mod storage;
-mod metric_operations;
-mod operations;
 mod model;
 mod tags;
 mod metric;
