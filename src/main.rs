@@ -64,7 +64,15 @@ fn main() {
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg (tags=1): {}", metric.average(
+        println!("Avg (tags=0,1): {}", metric.average(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+        ).unwrap_or(0.0));
+    }
+
+    {
+        let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
+        println!("Avg (tags=0): {}", metric.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
         ).unwrap_or(0.0));

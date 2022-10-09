@@ -43,7 +43,13 @@ impl TagsFilter {
             }
             TagsFilter::Or(tags) => {
                 match primary_tag {
-                    PrimaryTag::Named(primary_tag) => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?)),
+                    PrimaryTag::Named(primary_tag) => {
+                        if tags.contains(primary_tag) {
+                            Some(SecondaryTagsFilter::None)
+                        } else {
+                            Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?))
+                        }
+                    }
                     PrimaryTag::Default => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
                 }
             }
