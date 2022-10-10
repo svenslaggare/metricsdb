@@ -11,7 +11,10 @@ float-ord = "0.3"
 rand = "0.8"
 fnv = "1.0"
 libc = "0.2"
+
 approx = "0.5"
+lazy_static = "1.4"
+tempfile = "3"
 
 serde = { version = "1.0", features=["serde_derive"] }
 serde_json = "1.0"

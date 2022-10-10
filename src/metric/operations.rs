@@ -1,3 +1,4 @@
+use approx::assert_abs_diff_eq;
 use crate::metric::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
 
@@ -368,8 +369,6 @@ fn test_streaming_histogram3() {
 
 #[test]
 fn test_merge_streaming_histogram3() {
-    use approx::abs_diff_eq;
-
     let mut streaming_full = StreamingHistogram::new(1.0, 2001.0, 120);
 
     let mut streaming1 = StreamingHistogram::new(1.0, 1001.0, 50);
@@ -388,7 +387,7 @@ fn test_merge_streaming_histogram3() {
 
     streaming1.merge(streaming2);
 
-    abs_diff_eq!(streaming_full.percentile(99).unwrap_or(0.0), streaming1.percentile(99).unwrap_or(100.0), epsilon = 10.0);
+    assert_abs_diff_eq!(streaming_full.percentile(99).unwrap_or(0.0), streaming1.percentile(99).unwrap_or(100.0), epsilon = 10.0);
 }
 
 #[test]

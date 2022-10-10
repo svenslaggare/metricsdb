@@ -14,6 +14,7 @@ mod storage;
 mod model;
 mod tags;
 mod metric;
+mod integration_tests;
 
 #[derive(Deserialize)]
 struct SampleData {
