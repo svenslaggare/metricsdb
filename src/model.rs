@@ -14,8 +14,8 @@ pub struct Datapoint<T: Copy> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct TimeRange {
-    start: f64,
-    end: f64
+    pub start: f64,
+    pub end: f64
 }
 
 impl TimeRange {
@@ -95,6 +95,24 @@ impl MinMax for f32 {
 
     fn max(&self, other: Self) -> Self {
         f32::max(*self, other)
+    }
+}
+
+impl MinMax for u32 {
+    fn min(&self, other: Self) -> Self {
+        if self < &other {
+            *self
+        } else {
+            other
+        }
+    }
+
+    fn max(&self, other: Self) -> Self {
+        if self > &other {
+            *self
+        } else {
+            other
+        }
     }
 }
 

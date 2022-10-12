@@ -1,10 +1,12 @@
 use approx::assert_abs_diff_eq;
+
 use crate::metric::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
+use crate::TimeRange;
 
-pub trait StreamingOperation<T> {
-    fn add(&mut self, value: T);
-    fn value(&self) -> Option<T>;
+pub trait StreamingOperation<TInput, TOutput=TInput> {
+    fn add(&mut self, value: TInput);
+    fn value(&self) -> Option<TOutput>;
 
     fn merge(&mut self, other: Self);
 }
@@ -78,6 +80,38 @@ impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i
 impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i32>> Default for StreamingAverage<T> {
     fn default() -> Self {
         StreamingAverage::new()
+    }
+}
+
+pub struct StreamingTimeAverage<T> {
+    sum: T,
+    start: f64,
+    end: f64
+}
+
+impl<T: Default> StreamingTimeAverage<T> {
+    pub fn new(time_range: TimeRange) -> StreamingTimeAverage<T> {
+        StreamingTimeAverage {
+            sum: Default::default(),
+            start: time_range.start,
+            end: time_range.end
+        }
+    }
+}
+
+impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<f64, Output=f64>> StreamingOperation<T, f64> for StreamingTimeAverage<T> {
+    fn add(&mut self, value: T) {
+        self.sum += value;
+    }
+
+    fn value(&self) -> Option<f64> {
+        Some(self.sum.clone() / (self.end - self.start))
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.sum += other.sum;
+        self.start = self.start.min(other.start);
+        self.end = self.end.max(other.end);
     }
 }
 
@@ -184,7 +218,7 @@ impl StreamingHistogram {
     }
 }
 
-impl StreamingOperation<f64> for StreamingHistogram {
+impl StreamingOperation<f64, f64> for StreamingHistogram {
     fn add(&mut self, value: f64) {
         self.add_with_count(value, 1);
     }
@@ -232,7 +266,7 @@ impl StreamingApproxPercentile {
     }
 }
 
-impl StreamingOperation<f64> for StreamingApproxPercentile {
+impl StreamingOperation<f64, f64> for StreamingApproxPercentile {
     fn add(&mut self, value: f64) {
         self.histogram.add(value);
     }
