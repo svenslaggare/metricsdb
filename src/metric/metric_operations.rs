@@ -273,7 +273,11 @@ impl<T> MetricWindowing<T> {
     }
 }
 
-pub fn extract_operations_in_windows<T: StreamingOperation<E>, F: Fn(Option<E>) -> Option<E>, E>(windowing: MetricWindowing<T>, transform_output: F) -> Vec<(f64, E)> {
+pub fn extract_operations_in_windows<
+    T: StreamingOperation<TInput, TOutput>,
+    F: Fn(Option<TOutput>) -> Option<TOutput>,
+    TInput, TOutput
+>(windowing: MetricWindowing<T>, transform_output: F) -> Vec<(f64, TOutput)> {
     windowing.windows
         .iter()
         .filter(|operation| operation.is_some())
@@ -283,7 +287,7 @@ pub fn extract_operations_in_windows<T: StreamingOperation<E>, F: Fn(Option<E>) 
         .collect()
 }
 
-pub fn merge_operations<T: StreamingOperation<E>, E>(mut streaming_operations: Vec<T>) -> T {
+pub fn merge_operations<TOp: StreamingOperation<TInput, TOutput>, TInput, TOutput>(mut streaming_operations: Vec<TOp>) -> TOp {
     let mut streaming_operation = streaming_operations.remove(0);
     for other_operation in streaming_operations.into_iter() {
         streaming_operation.merge(other_operation);
@@ -292,7 +296,7 @@ pub fn merge_operations<T: StreamingOperation<E>, E>(mut streaming_operations: V
     streaming_operation
 }
 
-pub fn merge_windowing<T: StreamingOperation<E>, E>(mut primary_tags_windowing: Vec<MetricWindowing<T>>) -> MetricWindowing<T> {
+pub fn merge_windowing<T: StreamingOperation<TInput, TOutput>, TInput, TOutput>(mut primary_tags_windowing: Vec<MetricWindowing<T>>) -> MetricWindowing<T> {
     let mut windowing = primary_tags_windowing.remove(0);
     for current_windowing in primary_tags_windowing.into_iter() {
         for (window_index, current_window) in current_windowing.into_windows().into_iter().enumerate() {

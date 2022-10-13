@@ -164,15 +164,15 @@ fn main_count() {
         let _m = TimeMeasurement::new("sum", TimeMeasurementUnit::Microseconds);
         println!("Sum sqrt: {}", metric.sum(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_input_transform(TransformOperation::Sqrt)
+                .with_output_transform(TransformOperation::Sqrt)
         ).unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average_in_window", TimeMeasurementUnit::Microseconds);
 
-        // let windows = metric.sum_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
-        let windows = metric.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
+        let windows = metric.sum_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
+        // let windows = metric.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
         std::fs::write(
             &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()

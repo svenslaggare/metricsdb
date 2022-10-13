@@ -2,8 +2,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::metric::common::{PrimaryTagsStorage};
-use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingMax, StreamingOperation, StreamingSum, StreamingTimeAverage, StreamingTransformOperation};
+use crate::metric::metric_operations::{MetricWindowing};
+use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::{PrimaryTag, Query, TimeRange};
 use crate::metric::metric_operations;
 use crate::model::{Datapoint, MetricResult, Time, TIME_SCALE};
@@ -95,34 +95,16 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
     }
 
     pub fn sum(&self, query: Query) -> Option<f64> {
-        match query.input_transform {
-            Some(op) => {
-                self.operation(query, || StreamingTransformOperation::<StreamingSum<f64>>::from_default(op))
-            }
-            None => {
-                self.operation(query, || StreamingSum::<f64>::default())
-            }
-        }
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     pub fn average(&self, query: Query) -> Option<f64> {
-        let create = || {
-            StreamingTimeAverage::new(query.time_range)
-        };
-
-        match query.input_transform {
-            Some(op) => {
-                self.operation(query.clone(), || StreamingTransformOperation::new(op, create()))
-            }
-            None => {
-                self.operation(query.clone(), || create())
-            }
-        }
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation(query.clone(), || StreamingTimeAverage::<u64, _>::new(|x, y| (x as f64) / y, query.time_range))
     }
 
-    fn operation<T: StreamingOperation<f64>, F: Fn() -> T>(&self,
-                                                           query: Query,
-                                                           create_op: F) -> Option<f64> {
+    fn operation<T: StreamingOperation<u64, f64>, F: Fn() -> T>(&self, query: Query, create_op: F) -> Option<f64> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -139,7 +121,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                         start_block_index,
                         false,
                         |_, datapoint| {
-                            streaming_operation.add(datapoint.value as f64);
+                            streaming_operation.add(datapoint.value as u64);
                         }
                     );
 
@@ -154,41 +136,25 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
         let streaming_operation = metric_operations::merge_operations(streaming_operations);
         match query.output_transform {
-            Some(operation) => operation.apply(streaming_operation.value()?),
-            None => streaming_operation.value()
+            Some(operation) => operation.apply(streaming_operation.value()? as f64),
+            None => streaming_operation.value().map(|x| x as f64)
         }
     }
 
     pub fn sum_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
-        match query.input_transform {
-            Some(op) => {
-                self.operation_in_window(query, duration, |_, _| StreamingTransformOperation::<StreamingSum<f64>>::from_default(op))
-            }
-            None => {
-                self.operation_in_window(query, duration, |_, _| StreamingSum::<f64>::default())
-            }
-        }
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
-        let create = |start: f64, end: f64| {
-            StreamingTimeAverage::new(TimeRange::new(start, end))
-        };
-
-        match query.input_transform {
-            Some(op) => {
-                self.operation_in_window(query, duration, |start, end| StreamingTransformOperation::new(op, create(start, end)))
-            }
-            None => {
-                self.operation_in_window(query, duration, |start, end| create(start, end))
-            }
-        }
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(|x, y| (x as f64) / y, TimeRange::new(start, end)))
     }
 
-    fn operation_in_window<T: StreamingOperation<f64>, F: Fn(f64, f64) -> T>(&self,
-                                                                             query: Query,
-                                                                             duration: Duration,
-                                                                             create_op: F) -> Vec<(f64, f64)> {
+    fn operation_in_window<T: StreamingOperation<u64, f64>, F: Fn(f64, f64) -> T>(&self,
+                                                                                  query: Query,
+                                                                                  duration: Duration,
+                                                                                  create_op: F) -> Vec<(f64, f64)> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -212,7 +178,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                             let window_index = windowing.get_window_index(datapoint_time);
                             windowing.get(window_index)
                                 .get_or_insert_with(|| { create_op((datapoint_time / TIME_SCALE) as f64, ((datapoint_time + duration) / TIME_SCALE) as f64) })
-                                .add(datapoint.value as f64);
+                                .add(datapoint.value as u64);
                         }
                     );
 
@@ -228,7 +194,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         metric_operations::extract_operations_in_windows(
             metric_operations::merge_windowing(primary_tags_windowing),
             |value| {
-                let value = value?;
+                let value = value? as f64;
 
                 match query.output_transform {
                     Some(operation) => operation.apply(value),

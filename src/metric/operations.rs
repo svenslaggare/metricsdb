@@ -1,4 +1,4 @@
-use approx::assert_abs_diff_eq;
+use std::marker::PhantomData;
 
 use crate::metric::metric_operations::TimeRangeStatistics;
 use crate::model::MinMax;
@@ -9,6 +9,38 @@ pub trait StreamingOperation<TInput, TOutput=TInput> {
     fn value(&self) -> Option<TOutput>;
 
     fn merge(&mut self, other: Self);
+}
+
+pub struct StreamingConvert<TInput, TOutput, TInner: StreamingOperation<TInput, TInput>, TConverter: Fn(TInput) -> TOutput> {
+    inner: TInner,
+    converter: TConverter,
+    _phantom1: PhantomData<TInput>,
+    _phantom2: PhantomData<TOutput>
+}
+
+impl<TInput, TOutput, TInner: StreamingOperation<TInput, TInput>, TConverter: Fn(TInput) -> TOutput> StreamingConvert<TInput, TOutput, TInner, TConverter> {
+    pub fn new(inner: TInner, converter: TConverter) -> StreamingConvert<TInput, TOutput, TInner, TConverter> {
+        StreamingConvert {
+            inner,
+            converter,
+            _phantom1: Default::default(),
+            _phantom2: Default::default()
+        }
+    }
+}
+
+impl<TInput, TOutput, TInner: StreamingOperation<TInput, TInput>, TConverter: Fn(TInput) -> TOutput> StreamingOperation<TInput, TOutput> for StreamingConvert<TInput, TOutput, TInner, TConverter> {
+    fn add(&mut self, value: TInput) {
+        self.inner.add(value);
+    }
+
+    fn value(&self) -> Option<TOutput> {
+        self.inner.value().map(|x| (self.converter)(x))
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.inner.merge(other.inner);
+    }
 }
 
 pub struct StreamingSum<T> {
@@ -83,15 +115,17 @@ impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i
     }
 }
 
-pub struct StreamingTimeAverage<T> {
+pub struct StreamingTimeAverage<T, TDiv> {
+    div: TDiv,
     sum: T,
     start: f64,
     end: f64
 }
 
-impl<T: Default> StreamingTimeAverage<T> {
-    pub fn new(time_range: TimeRange) -> StreamingTimeAverage<T> {
+impl<T: Default, TDiv: Fn(T, f64) -> f64> StreamingTimeAverage<T, TDiv> {
+    pub fn new(div: TDiv, time_range: TimeRange) -> StreamingTimeAverage<T, TDiv> {
         StreamingTimeAverage {
+            div,
             sum: Default::default(),
             start: time_range.start,
             end: time_range.end
@@ -99,13 +133,13 @@ impl<T: Default> StreamingTimeAverage<T> {
     }
 }
 
-impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<f64, Output=f64>> StreamingOperation<T, f64> for StreamingTimeAverage<T> {
+impl<T: Clone + Default + std::ops::AddAssign, TDiv: Fn(T, f64) -> f64> StreamingOperation<T, f64> for StreamingTimeAverage<T, TDiv> {
     fn add(&mut self, value: T) {
         self.sum += value;
     }
 
     fn value(&self) -> Option<f64> {
-        Some(self.sum.clone() / (self.end - self.start))
+        Some((self.div)(self.sum.clone(), self.end - self.start))
     }
 
     fn merge(&mut self, other: Self) {
@@ -403,6 +437,8 @@ fn test_streaming_histogram3() {
 
 #[test]
 fn test_merge_streaming_histogram3() {
+    use approx::assert_abs_diff_eq;
+
     let mut streaming_full = StreamingHistogram::new(1.0, 2001.0, 120);
 
     let mut streaming1 = StreamingHistogram::new(1.0, 1001.0, 50);

@@ -1,0 +1,22 @@
+n: 12101966
+count: 6.92 s
+Tag: Default
+Num blocks: 0
+Num datapoints: 0, max datapoints: 0
+Tag: Named("tag:T1")
+Num blocks: 1008
+Num datapoints: 6050983, max datapoints: 6161
+Tag: Named("tag:T2")
+Num blocks: 1008
+Num datapoints: 6050983, max datapoints: 6156
+Sum: 144328
+sum: 140.18 μs
+Avg: 20.045555555555556
+average: 152.83 μs
+Sum (tags=0,1): 144328
+sum: 130.13 μs
+Sum (tags=0): 72164
+sum: 65.28 μs
+Sum sqrt: 144328
+sum: 363.76 μs
+average_in_window: 553.01 μs
