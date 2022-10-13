@@ -70,11 +70,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                 datapoint.time_offset = time_offset as u32;
 
                 let datapoint_duration = primary_tag.storage.datapoint_duration();
-                let last_datapoint = primary_tag.storage.active_block_datapoints_mut(secondary_tags)
-                    .map(|datapoint| datapoint.last_mut())
-                    .flatten();
-
-                if let Some(last_datapoint) = last_datapoint {
+                if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
                     if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
                         last_datapoint.value = value;
                         self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
@@ -251,8 +247,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                             tags_filter,
                             start_block_index,
                             false,
-                            |block_start_time, datapoint| {
-                                let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                            |datapoint_time, datapoint| {
                                 window_stats[windowing.get_window_index(datapoint_time)]
                                     .get_or_insert_with(|| TimeRangeStatistics::default())
                                     .handle(datapoint.value as f64);
@@ -271,8 +266,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                         tags_filter,
                         start_block_index,
                         false,
-                        |block_start_time, datapoint| {
-                            let datapoint_time = block_start_time + datapoint.time_offset as Time;
+                        |datapoint_time, datapoint| {
                             let window_index = windowing.get_window_index(datapoint_time);
                             windowing.get(window_index)
                                 .get_or_insert_with(|| {

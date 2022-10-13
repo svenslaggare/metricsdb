@@ -63,7 +63,7 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
                             sub_blocks_iterators.push(iterator);
                         } else {
                             for datapoint in &mut iterator {
-                                apply(block_start_time, datapoint);
+                                apply(block_start_time + datapoint.time_offset as Time, datapoint);
                             }
                         }
                     }
@@ -76,7 +76,8 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
                         let selected_sub_block = ordered_sub_blocks[0];
                         let selected_iterator = &mut sub_blocks_iterators[selected_sub_block];
 
-                        apply(block_start_time, selected_iterator.next().unwrap());
+                        let datapoint = selected_iterator.next().unwrap();
+                        apply(block_start_time + datapoint.time_offset as Time, datapoint);
 
                         if selected_iterator.outside_time_range {
                             outside_time_range = true;
