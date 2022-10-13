@@ -6,7 +6,7 @@ use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::{PrimaryTag, Query};
 use crate::metric::metric_operations;
-use crate::model::{Datapoint, MetricResult, Time, TIME_SCALE};
+use crate::model::{Datapoint, MetricError, MetricResult, Time, TIME_SCALE};
 use crate::storage::file::MetricStorageFile;
 use crate::storage::MetricStorage;
 
@@ -62,7 +62,9 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         };
 
         if let Some(block_start_time) = primary_tag.storage.active_block_start_time() {
-            assert!(time >= block_start_time, "{}, {}", time, block_start_time);
+            if time < block_start_time {
+                return Err(MetricError::InvalidTimeOrder);
+            }
 
             let time_offset = time - block_start_time;
             if time_offset < primary_tag.storage.block_duration() {

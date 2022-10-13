@@ -6,7 +6,7 @@ use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::{PrimaryTag, Query, TimeRange};
 use crate::metric::metric_operations;
-use crate::model::{Datapoint, MetricResult, Time, TIME_SCALE};
+use crate::model::{Datapoint, MetricError, MetricResult, Time, TIME_SCALE};
 use crate::storage::file::MetricStorageFile;
 use crate::storage::MetricStorage;
 
@@ -62,7 +62,9 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         };
 
         if let Some(block_start_time) = primary_tag.storage.active_block_start_time() {
-            assert!(time >= block_start_time, "{}, {}", time, block_start_time);
+            if time < block_start_time {
+                return Err(MetricError::InvalidTimeOrder);
+            }
 
             let time_offset = time - block_start_time;
             if time_offset < primary_tag.storage.block_duration() {
@@ -97,7 +99,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
     pub fn average(&self, query: Query) -> Option<f64> {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation(query.clone(), || StreamingTimeAverage::<u64, _>::new(|x, y| (x as f64) / y, query.time_range))
+        self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
     }
 
     fn operation<T: StreamingOperation<u64, f64>, F: Fn() -> T>(&self, query: Query, create_op: F) -> Option<f64> {
@@ -144,7 +146,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(|x, y| (x as f64) / y, TimeRange::new(start, end)))
+        self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
     }
 
     fn operation_in_window<T: StreamingOperation<u64, f64>, F: Fn(f64, f64) -> T>(&self,

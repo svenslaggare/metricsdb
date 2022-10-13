@@ -128,7 +128,8 @@ pub enum MetricError {
     FailedToSaveSecondaryTag(std::io::Error),
     FailedToLoadSecondaryTag(std::io::Error),
     FailedToCreateMetric(std::io::Error),
-    FailedToAllocateSubBlock
+    FailedToAllocateSubBlock,
+    InvalidTimeOrder
 }
 
 impl From<MemoryFileError> for MetricError {

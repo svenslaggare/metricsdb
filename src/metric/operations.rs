@@ -115,17 +115,15 @@ impl<T: Clone + Default + std::ops::AddAssign + std::ops::Div<Output=T> + From<i
     }
 }
 
-pub struct StreamingTimeAverage<T, TDiv> {
-    div: TDiv,
+pub struct StreamingTimeAverage<T> {
     sum: T,
     start: f64,
     end: f64
 }
 
-impl<T: Default, TDiv: Fn(T, f64) -> f64> StreamingTimeAverage<T, TDiv> {
-    pub fn new(div: TDiv, time_range: TimeRange) -> StreamingTimeAverage<T, TDiv> {
+impl<T: Default + DivConvert> StreamingTimeAverage<T> {
+    pub fn new(time_range: TimeRange) -> StreamingTimeAverage<T> {
         StreamingTimeAverage {
-            div,
             sum: Default::default(),
             start: time_range.start,
             end: time_range.end
@@ -133,19 +131,29 @@ impl<T: Default, TDiv: Fn(T, f64) -> f64> StreamingTimeAverage<T, TDiv> {
     }
 }
 
-impl<T: Clone + Default + std::ops::AddAssign, TDiv: Fn(T, f64) -> f64> StreamingOperation<T, f64> for StreamingTimeAverage<T, TDiv> {
+impl<T: Clone + Default + std::ops::AddAssign + DivConvert> StreamingOperation<T, f64> for StreamingTimeAverage<T> {
     fn add(&mut self, value: T) {
         self.sum += value;
     }
 
     fn value(&self) -> Option<f64> {
-        Some((self.div)(self.sum.clone(), self.end - self.start))
+        Some(self.sum.div_convert(self.end - self.start))
     }
 
     fn merge(&mut self, other: Self) {
         self.sum += other.sum;
         self.start = self.start.min(other.start);
         self.end = self.end.max(other.end);
+    }
+}
+
+pub trait DivConvert {
+    fn div_convert(&self, other: f64) -> f64;
+}
+
+impl DivConvert for u64 {
+    fn div_convert(&self, other: f64) -> f64 {
+        (*self as f64) / other
     }
 }
 
