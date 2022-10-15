@@ -85,10 +85,9 @@ impl SecondaryTagsIndex {
     }
 
     pub fn try_add(&mut self, tag: &str) -> Option<(Tags, bool)> {
-        let num_bits = std::mem::size_of::<Tags>() * 8;
         if let Some(pattern) = self.mapping.get(tag) {
             return Some((*pattern, false));
-        } else if self.mapping.len() < num_bits {
+        } else if self.mapping.len() < Tags::BITS as usize {
             let pattern = 1 << self.mapping.len();
             let inserted = self.mapping.insert(tag.to_owned(), pattern).is_none();
             Some((pattern, inserted))
@@ -139,13 +138,13 @@ impl SecondaryTagsFilter {
 #[test]
 fn test_try_add1() {
     let mut index = SecondaryTagsIndex::new(Path::new(""));
-    for number in 1..65 {
+    for number in 1..(Tags::BITS + 1) {
         assert_eq!(true, index.try_add(&format!("tag:T{}", number)).is_some());
         assert_eq!(true, index.try_add(&format!("tag:T{}", number)).is_some());
     }
 
     assert_eq!(true, index.try_add(&format!("tag:T{}", 33)).is_some());
-    assert_eq!(true, index.try_add(&format!("tag:T{}", 65)).is_none());
+    assert_eq!(true, index.try_add(&format!("tag:T{}", Tags::BITS + 1)).is_none());
 }
 
 #[test]

@@ -3,7 +3,7 @@ use crate::storage::memory_file::MemoryFileError;
 use crate::tags::{TagsFilter};
 
 pub type Time = u64;
-pub type Tags = u64;
+pub type Tags = u128;
 pub const TIME_SCALE: u64 = 1_000_000;
 
 #[derive(Clone)]
