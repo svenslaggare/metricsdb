@@ -26,6 +26,16 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
         }
 
+        for entry in std::fs::read_dir(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))? {
+            if let Ok(entry) = entry {
+                if entry.path().is_dir() {
+                    std::fs::remove_dir_all(entry.path()).map_err(|err| MetricError::FailedToCreateMetric(err))?;
+                } else {
+                    std::fs::remove_file(entry.path()).map_err(|err| MetricError::FailedToCreateMetric(err))?;
+                }
+            }
+        }
+
         let mut primary_tags_storage = PrimaryTagsStorage {
             base_path: base_path.to_owned(),
             tags: FnvHashMap::default()
