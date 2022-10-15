@@ -172,6 +172,8 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
     fn create_block(&mut self, time: Time) -> Result<(), MetricError> {
         unsafe {
             if self.has_blocks() {
+                let shrink_amount = (*self.active_block_mut()).compact();
+                self.storage_file.shrink(shrink_amount);
                 self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
                 (*self.header_mut()).active_block_start += (*self.active_block()).size;
                 (*self.header_mut()).active_block_index += 1;
@@ -283,6 +285,36 @@ struct Block<E: Copy> {
 }
 
 impl<E: Copy> Block<E> {
+    pub fn compact(&mut self) -> usize {
+        let block_ptr = self as *const Block<E>;
+
+        let mut valid_sub_blocks = Vec::new();
+        for sub_block in &mut self.sub_blocks[..self.num_sub_blocks] {
+            if sub_block.count > 0 {
+                valid_sub_blocks.push((sub_block.clone(), sub_block.datapoints(block_ptr).iter().cloned().collect::<Vec<_>>()));
+            }
+
+            sub_block.clear();
+        }
+
+        let mut new_size = std::mem::size_of_val(self);
+        self.num_sub_blocks = 0;
+        self.next_sub_block_offset = 0;
+        for (sub_block_index, (mut sub_block, datapoints)) in valid_sub_blocks.into_iter().enumerate() {
+            sub_block.offset = self.next_sub_block_offset;
+            sub_block.datapoints_mut(block_ptr).clone_from_slice(&datapoints);
+            self.num_sub_blocks += 1;
+            self.next_sub_block_offset += sub_block.datapoints_size();
+
+            self.sub_blocks[sub_block_index] = sub_block;
+            new_size += sub_block.datapoints_size();
+        }
+
+        let decreased = self.size - new_size;
+        self.size = new_size;
+        decreased
+    }
+
     pub fn datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint<E>]> {
         let block_ptr = self as *mut Block<E>;
         let (_, sub_block) = self.find_sub_block(tags)?;
@@ -344,6 +376,13 @@ struct SubBlock<E: Copy> {
 
 impl<E: Copy> SubBlock<E> {
     pub fn free(&mut self) {
+        self.count = 0;
+        self.tags = 0;
+    }
+
+    pub fn clear(&mut self) {
+        self.offset = 0;
+        self.capacity = 0;
         self.count = 0;
         self.tags = 0;
     }

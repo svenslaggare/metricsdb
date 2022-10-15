@@ -3,11 +3,11 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use metric::gauge::DefaultGaugeMetric;
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
-use metric::operations::TransformOperation;
 use crate::metric::count::DefaultCountMetric;
+use crate::metric::gauge::DefaultGaugeMetric;
+use crate::metric::operations::TransformOperation;
 use crate::tags::{PrimaryTag, TagsFilter};
 
 mod helpers;
@@ -15,6 +15,8 @@ mod storage;
 mod model;
 mod tags;
 mod metric;
+
+#[cfg(test)]
 mod integration_tests;
 
 #[derive(Deserialize)]
@@ -31,8 +33,8 @@ fn main_gauge() {
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultGaugeMetric::new(Path::new("test_metric")).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    // metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
+    // metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
@@ -181,6 +183,6 @@ fn main_count() {
 }
 
 fn main() {
-    // main_gauge();
-    main_count();
+    main_gauge();
+    // main_count();
 }

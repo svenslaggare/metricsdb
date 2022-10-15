@@ -19,6 +19,8 @@ pub struct MemoryFile {
     file: File
 }
 
+const PAGE_SIZE: usize = 4096;
+
 impl MemoryFile {
     pub fn new(path: &Path, size: usize, create: bool) -> Result<MemoryFile, MemoryFileError> {
         let mut file = if create {
@@ -38,7 +40,7 @@ impl MemoryFile {
         };
 
         let backing_size = if create {
-            let backing_size = 4096;
+            let backing_size = PAGE_SIZE as u64;
             file.set_len(backing_size).map_err(|err| MemoryFileError::IO(err))?;
             backing_size as usize
         } else {
@@ -83,7 +85,7 @@ impl MemoryFile {
         self.backing_size += amount;
         let actual_size = file_size(&mut self.file).map_err(|err| MemoryFileError::IO(err))? as usize;
         if self.backing_size > actual_size {
-            let page_size = 4096;
+            let page_size = PAGE_SIZE as u64;
             self.file.set_len(
                 ((self.backing_size as u64 + page_size - 1) / page_size) * page_size
             ).map_err(|err| MemoryFileError::IO(err))?;
@@ -92,10 +94,17 @@ impl MemoryFile {
         Ok(())
     }
 
+    pub fn shrink(&mut self, amount: usize) {
+        if amount < self.backing_size {
+            self.backing_size -= amount;
+        } else {
+            self.backing_size = 0;
+        }
+    }
+
     pub fn sync(&mut self, address: *const u8, size: usize, is_async: bool) -> Result<(), MemoryFileError> {
         unsafe {
             // The address that we invoke msync with must be aligned to pages
-            const PAGE_SIZE: usize = 4096;
             let address = address as usize;
             let page_address = (address / PAGE_SIZE) * PAGE_SIZE;
             let end_address = address + size;
