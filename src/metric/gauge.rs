@@ -53,8 +53,8 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
             value
         };
 
-        if let Some(block_start_time) = primary_tag.storage.active_block_start_time() {
-            if time < block_start_time {
+        if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
+            if time < block_end_time {
                 return Err(MetricError::InvalidTimeOrder);
             }
 

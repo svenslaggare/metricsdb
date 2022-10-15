@@ -151,12 +151,12 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
         unsafe { self.block_at_ptr(index).map(|block| ((*block).start_time, (*block).end_time)) }
     }
 
-    fn active_block_start_time(&self) -> Option<Time> {
+    fn active_block_time_range(&self) -> Option<(Time, Time)> {
         if !self.has_blocks() {
             return None;
         }
 
-        unsafe { Some((*self.active_block()).start_time) }
+        unsafe { Some(((*self.active_block()).start_time, (*self.active_block()).end_time)) }
     }
 
     fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint<E>]> {

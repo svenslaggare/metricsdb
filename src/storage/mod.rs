@@ -14,7 +14,7 @@ pub trait MetricStorage<E: Copy> {
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
 
-    fn active_block_start_time(&self) -> Option<Time>;
+    fn active_block_time_range(&self) -> Option<(Time, Time)>;
     fn active_block_datapoints_mut(&mut self, tags: Tags) -> Option<&mut [Datapoint<E>]>;
 
     fn last_datapoint_mut(&mut self, tags: Tags) -> Option<&mut Datapoint<E>> {
