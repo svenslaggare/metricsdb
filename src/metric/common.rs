@@ -7,13 +7,10 @@ use crate::model::{MetricError, MetricResult, TIME_SCALE};
 use crate::storage::MetricStorage;
 use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
-// pub const DEFAULT_BLOCK_DURATION: f64 = 0.0;
-// pub const DEFAULT_BLOCK_DURATION: f64 = 1.0;
-// pub const DEFAULT_BLOCK_DURATION: f64 = 10.0;
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
-// pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.5;
+// pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.2;
 
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,

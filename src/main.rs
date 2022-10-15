@@ -33,8 +33,8 @@ fn main_gauge() {
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultGaugeMetric::new(Path::new("test_metric")).unwrap();
-    // metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    // metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
