@@ -43,15 +43,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
     pub fn add(&mut self, time: f64, count: u16, tags: &[&str]) -> MetricResult<()> {
         let mut tags = tags.into_iter().cloned().collect::<Vec<_>>();
-
-        let (primary_tag_key, mut primary_tag) = self.primary_tags_storage.extract_primary_tag(&mut tags);
-        let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
-            Ok(secondary_tags) => secondary_tags,
-            Err(err) => {
-                self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
-                return Err(err);
-            }
-        };
+        let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = count as u32;
@@ -75,7 +67,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                 if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
                     if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
                         last_datapoint.value += value;
-                        self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
+                        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
                         return Ok(());
                     }
                 }
@@ -88,7 +80,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
             primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
         }
 
-        self.primary_tags_storage.tags.insert(primary_tag_key, primary_tag);
+        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
         Ok(())
     }
 
@@ -107,7 +99,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         assert!(end_time > start_time);
 
         let mut streaming_operations = Vec::new();
-        for (primary_tag_key, primary_tag) in self.primary_tags_storage.tags.iter() {
+        for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let mut streaming_operation = create_op();
@@ -159,7 +151,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
         let mut primary_tags_windowing = Vec::new();
-        for (primary_tag_value, primary_tag) in self.primary_tags_storage.tags.iter() {
+        for (primary_tag_value, primary_tag) in self.primary_tags_storage.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
                 if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
                     let mut windowing = MetricWindowing::new(start_time, end_time, duration);

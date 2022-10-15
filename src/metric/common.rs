@@ -5,6 +5,7 @@ use fnv::FnvHashMap;
 
 use crate::model::{MetricError, MetricResult, TIME_SCALE};
 use crate::storage::MetricStorage;
+use crate::Tags;
 use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
@@ -14,7 +15,7 @@ pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,
-    pub tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>
+    tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
@@ -70,6 +71,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         }
     }
 
+    pub fn iter(&self) -> impl Iterator<Item=(&PrimaryTag, &PrimaryTagMetric<TStorage, E>)> {
+        self.tags.iter()
+    }
+
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         if !self.tags.contains_key(&tag) {
             let path = match &tag {
@@ -86,7 +91,20 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         Ok(())
     }
 
-    pub fn extract_primary_tag<'a>(&'a mut self, tags: &mut Vec<&str>) -> (PrimaryTag, PrimaryTagMetric<TStorage, E>) {
+    pub fn insert_tags(&mut self, tags: &mut Vec<&str>) -> MetricResult<(PrimaryTag, PrimaryTagMetric<TStorage, E>, Tags)> {
+        let (primary_tag_key, mut primary_tag) = self.extract_primary_tag(tags);
+        let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
+            Ok(secondary_tags) => secondary_tags,
+            Err(err) => {
+                self.tags.insert(primary_tag_key, primary_tag);
+                return Err(err);
+            }
+        };
+
+        Ok((primary_tag_key, primary_tag, secondary_tags))
+    }
+
+    fn extract_primary_tag(&mut self, tags: &mut Vec<&str>) -> (PrimaryTag, PrimaryTagMetric<TStorage, E>) {
         for (index, tag) in tags.iter().enumerate() {
             let tag = PrimaryTag::Named((*tag).to_owned());
             if let Some(primary_tag) = self.tags.remove(&tag) {
@@ -96,6 +114,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         }
 
         (PrimaryTag::Default, self.tags.remove(&PrimaryTag::Default).unwrap())
+    }
+
+    pub fn return_tags(&mut self, primary_tag_key: PrimaryTag, primary_tag: PrimaryTagMetric<TStorage, E>) {
+        self.tags.insert(primary_tag_key, primary_tag);
     }
 }
 
