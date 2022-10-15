@@ -1,9 +1,10 @@
+use std::path::Path;
 use approx::assert_abs_diff_eq;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use tempfile::tempdir;
 
-use crate::{DefaultCountMetric, DefaultGaugeMetric, PrimaryTag, Query, TagsFilter, TimeRange, TransformOperation};
+use crate::{DefaultCountMetric, DefaultGaugeMetric, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange, TransformOperation};
 
 #[derive(Deserialize)]
 struct SampleData {
@@ -310,5 +311,38 @@ fn test_count_primary_tag_sum2() {
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
         )
+    );
+}
+
+#[test]
+fn test_metrics_engine1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec!["tag:T1", "tag:T2"];
+
+    let mut metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    metrics_engine.add_gauge_metric("cpu").unwrap();
+    metrics_engine.add_count_metric("perf_events").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = &[tags_list[(index % 2)]];
+        metrics_engine.gauge("cpu", SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
+        metrics_engine.count("perf_events", SAMPLE_DATA.times[index], 1, tags).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(0.6676723153748684),
+        metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time)))
+    );
+
+    assert_eq!(
+        Some(144328.0),
+        metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time)))
     );
 }

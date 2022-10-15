@@ -198,12 +198,13 @@ fn main_engine() {
     {
         let _m = TimeMeasurement::new("gauge & count", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags = &[];
             let tags = &[tags_list[(index % 2)]];
             metrics_engine.gauge("cpu", data.times[index], data.values[index] as f64, tags).unwrap();
             metrics_engine.count("perf_events", data.times[index], 1, tags).unwrap();
         }
     }
+
+    // let mut metrics_engine = MetricsEngine::from_existing(&Path::new("test_metric_engine")).unwrap();
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
