@@ -191,7 +191,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         metric_operations::extract_operations_in_windows(
             metric_operations::merge_windowing(primary_tags_windowing),
             |value| {
-                let value = value? as f64;
+                let value = value?;
 
                 match query.output_transform {
                     Some(operation) => operation.apply(value),
