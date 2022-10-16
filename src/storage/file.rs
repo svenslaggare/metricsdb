@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::Duration;
 
 use crate::storage::memory_file::MemoryFile;
 use crate::model::{Datapoint, MetricError, Time};
@@ -8,6 +9,7 @@ use crate::Tags;
 
 const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
 const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
+const SYNC_INTERVAL: Duration = Duration::new(2, 0);
 
 pub struct MetricStorageFile<E> {
     storage_file: MemoryFile,
@@ -206,6 +208,14 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
 
             let sub_block = self.allocate_sub_block_for_insertion(active_block, tags).ok_or_else(|| MetricError::FailedToAllocateSubBlock)?;
             sub_block.add_datapoint(active_block, datapoint);
+        }
+
+        if (std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL {
+            unsafe {
+                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
+            }
+
+            self.last_sync = std::time::Instant::now();
         }
 
         Ok(())
