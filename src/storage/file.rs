@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::storage::memory_file::MemoryFile;
-use crate::model::{Datapoint, MetricError, Time};
+use crate::model::{Datapoint, MetricError, MetricResult, Time};
 use crate::storage::MetricStorage;
 use crate::Tags;
 
@@ -66,49 +66,62 @@ impl<E: Copy> MetricStorageFile<E> {
         }
     }
 
-    fn allocate_sub_block_for_insertion(&mut self, block_ptr: *mut Block<E>, tags: Tags) -> Option<&mut SubBlock<E>> {
+    fn allocate_sub_block_for_insertion(&mut self, block_ptr: *mut Block<E>, tags: Tags) -> MetricResult<&mut SubBlock<E>> {
         let default_capacity = 100;
         let growth_factor = 2;
 
         unsafe {
-            let mut allocate_file = |active_block: *mut Block<E>, size: usize| {
-                self.storage_file.try_grow_file(size).unwrap();
+            let mut allocate_file = |active_block: *mut Block<E>, size: usize| -> MetricResult<()> {
+                self.storage_file.try_grow_file(size).map_err(|err| MetricError::MemoryFileError(err))?;
                 (*active_block).size += size;
+                Ok(())
             };
 
             if let Some((sub_block_index, sub_block)) = (*block_ptr).find_sub_block(tags) {
                 if sub_block.count < sub_block.capacity {
-                    Some(sub_block)
+                    Ok(sub_block)
                 } else {
                     let desired_capacity = sub_block.count * growth_factor;
                     if let Some(increased_capacity) = (*block_ptr).try_extend(sub_block_index, sub_block, desired_capacity) {
-                        allocate_file(block_ptr, increased_capacity as usize * std::mem::size_of::<Datapoint<E>>());
-                        Some(sub_block)
+                        allocate_file(block_ptr, increased_capacity as usize * std::mem::size_of::<Datapoint<E>>())?;
+                        Ok(sub_block)
                     } else {
                         if let Some((new_sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, desired_capacity) {
                             if allocated {
-                                allocate_file(block_ptr, new_sub_block.datapoints_size());
+                                allocate_file(block_ptr, new_sub_block.datapoints_size())?;
                             }
 
                             new_sub_block.replace_at(block_ptr, sub_block);
-                            Some(new_sub_block)
+                            Ok(new_sub_block)
                         } else {
-                            None
+                            Err(MetricError::FailedToAllocateSubBlock)
                         }
                     }
                 }
             } else {
                 if let Some((sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, default_capacity) {
                     if allocated {
-                        allocate_file(block_ptr, sub_block.datapoints_size());
+                        allocate_file(block_ptr, sub_block.datapoints_size())?;
                     }
 
-                    Some(sub_block)
+                    Ok(sub_block)
                 } else {
-                    None
+                    Err(MetricError::FailedToAllocateSubBlock)
                 }
             }
         }
+    }
+
+    fn try_sync_active_block(&mut self) -> MetricResult<()> {
+        if (std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL {
+            unsafe {
+                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
+            }
+
+            self.last_sync = std::time::Instant::now();
+        }
+
+        Ok(())
     }
 }
 
@@ -206,17 +219,11 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             let active_block = self.active_block_mut();
             (*active_block).end_time = (*active_block).end_time.max((*active_block).start_time + datapoint.time_offset as Time);
 
-            let sub_block = self.allocate_sub_block_for_insertion(active_block, tags).ok_or_else(|| MetricError::FailedToAllocateSubBlock)?;
+            let sub_block = self.allocate_sub_block_for_insertion(active_block, tags)?;
             sub_block.add_datapoint(active_block, datapoint);
         }
 
-        if (std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL {
-            unsafe {
-                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
-            }
-
-            self.last_sync = std::time::Instant::now();
-        }
+        self.try_sync_active_block()?;
 
         Ok(())
     }

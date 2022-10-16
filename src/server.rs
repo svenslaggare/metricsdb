@@ -8,7 +8,7 @@ use serde::Deserialize;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::{Json, Router};
-use axum::routing::{get, post, put};
+use axum::routing::{post, put};
 
 use crate::{MetricsEngine, Query, TimeRange};
 
