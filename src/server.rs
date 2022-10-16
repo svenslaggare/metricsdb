@@ -81,7 +81,7 @@ async fn add_gauge_metric_value(State(state): State<Arc<AppState>>,
         if !metrics_engine.gauge(&name, entry.time, entry.value, entry.tags).is_ok() {
             return Json(
                 json!({
-                    "success": true
+                    "success": false
                 })
             );
         }
