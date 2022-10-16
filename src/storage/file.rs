@@ -272,7 +272,7 @@ struct Header {
     active_block_start: usize,
 }
 
-const NUM_SUB_BLOCKS: usize = 100;
+const NUM_SUB_BLOCKS: usize = 150;
 
 struct Block<E: Copy> {
     size: usize,
