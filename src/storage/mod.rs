@@ -32,7 +32,6 @@ pub trait MetricStorage<E: Copy> {
         Ok(())
     }
 
-    fn visit_datapoints<F: FnMut(Tags, &[Datapoint<E>])>(&self, block_index: usize, apply: F);
     fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint<E>])> + 'a>>;
 }
 

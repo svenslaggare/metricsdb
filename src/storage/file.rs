@@ -12,7 +12,8 @@ const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
 pub struct MetricStorageFile<E> {
     storage_file: MemoryFile,
     index_file: MemoryFile,
-    _phantom: PhantomData<E>
+    _phantom: PhantomData<E>,
+    last_sync: std::time::Instant
 }
 
 impl<E: Copy> MetricStorageFile<E> {
@@ -114,7 +115,8 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
         let mut storage = MetricStorageFile {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true)?,
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true)?,
-            _phantom: Default::default()
+            _phantom: Default::default(),
+            last_sync: std::time::Instant::now()
         };
 
         storage.initialize(block_duration, datapoint_duration);
@@ -126,7 +128,8 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             MetricStorageFile {
                 storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false)?,
                 index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false)?,
-                _phantom: Default::default()
+                _phantom: Default::default(),
+                last_sync: std::time::Instant::now()
             }
         )
     }
@@ -206,18 +209,6 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
         }
 
         Ok(())
-    }
-
-    fn visit_datapoints<F: FnMut(Tags, &[Datapoint<E>])>(&self, block_index: usize, mut apply: F) {
-        unsafe {
-            if let Some(block_ptr) = self.block_at_ptr(block_index) {
-                for sub_block in &(*block_ptr).sub_blocks[..(*block_ptr).num_sub_blocks] {
-                    if sub_block.count > 0 {
-                        apply(sub_block.tags, sub_block.datapoints(block_ptr));
-                    }
-                }
-            }
-        }
     }
 
     fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint<E>])> + 'a>> {
