@@ -91,7 +91,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         Ok(())
     }
 
-    pub fn insert_tags(&mut self, tags: &mut Vec<&str>) -> MetricResult<(PrimaryTag, PrimaryTagMetric<TStorage, E>, Tags)> {
+    pub fn insert_tags(&mut self, tags: &mut Vec<String>) -> MetricResult<(PrimaryTag, PrimaryTagMetric<TStorage, E>, Tags)> {
         let (primary_tag_key, mut primary_tag) = self.extract_primary_tag(tags);
         let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
             Ok(secondary_tags) => secondary_tags,
@@ -104,7 +104,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         Ok((primary_tag_key, primary_tag, secondary_tags))
     }
 
-    fn extract_primary_tag(&mut self, tags: &mut Vec<&str>) -> (PrimaryTag, PrimaryTagMetric<TStorage, E>) {
+    fn extract_primary_tag(&mut self, tags: &mut Vec<String>) -> (PrimaryTag, PrimaryTagMetric<TStorage, E>) {
         for (index, tag) in tags.iter().enumerate() {
             let tag = PrimaryTag::Named((*tag).to_owned());
             if let Some(primary_tag) = self.tags.remove(&tag) {

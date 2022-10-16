@@ -71,10 +71,10 @@ impl SecondaryTagsIndex {
         }
     }
 
-    pub fn try_add_tags(&mut self, tags: &[&str]) -> MetricResult<Tags> {
+    pub fn try_add_tags(&mut self, tags: &[String]) -> MetricResult<Tags> {
         let mut changed = false;
         for tag in tags {
-            changed |= self.try_add(*tag).ok_or_else(|| MetricError::ExceededSecondaryTags)?.1;
+            changed |= self.try_add(tag).ok_or_else(|| MetricError::ExceededSecondaryTags)?.1;
         }
 
         if changed {

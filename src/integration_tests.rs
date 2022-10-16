@@ -32,7 +32,7 @@ fn test_gauge_average1() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, &[]).unwrap();
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -53,7 +53,7 @@ fn test_gauge_average2() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -75,7 +75,7 @@ fn test_gauge_average3() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -102,7 +102,7 @@ fn test_gauge_average4() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, &[]).unwrap();
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -128,7 +128,7 @@ fn test_gauge_max1() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, &[]).unwrap();
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -148,7 +148,7 @@ fn test_gauge_95th1() {
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, &[]).unwrap();
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -171,7 +171,7 @@ fn test_gauge_primary_tag_average1() {
     metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -195,7 +195,7 @@ fn test_gauge_primary_tag_average2() {
     metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -225,7 +225,7 @@ fn test_gauge_primary_tag_95th1() {
     metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -250,7 +250,7 @@ fn test_count_sum1() {
     let mut metric = DefaultCountMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], 1, &[]).unwrap();
+        metric.add(SAMPLE_DATA.times[index], 1, Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -273,7 +273,7 @@ fn test_count_primary_tag_sum1() {
     metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], 1, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -297,7 +297,7 @@ fn test_count_primary_tag_sum2() {
     metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
+        let tags = vec![tags_list[(index % 2)].to_owned()];
         metric.add(SAMPLE_DATA.times[index], 1, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
@@ -327,8 +327,8 @@ fn test_metrics_engine1() {
     metrics_engine.add_count_metric("perf_events").unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        let tags = &[tags_list[(index % 2)]];
-        metrics_engine.gauge("cpu", SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metrics_engine.gauge("cpu", SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone()).unwrap();
         metrics_engine.count("perf_events", SAMPLE_DATA.times[index], 1, tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {

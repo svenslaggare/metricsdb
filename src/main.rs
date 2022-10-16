@@ -2,8 +2,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
-use crate::engine::MetricsEngine;
 
+use crate::engine::MetricsEngine;
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
 use crate::metric::count::DefaultCountMetric;
@@ -17,9 +17,22 @@ mod model;
 mod tags;
 mod metric;
 mod engine;
+mod server;
 
 #[cfg(test)]
 mod integration_tests;
+
+// fn main() {
+//     main_gauge();
+//     // main_count();
+//     // main_engine();
+// }
+
+#[tokio::main]
+async fn main() {
+    server::main().await
+}
+
 
 #[derive(Deserialize)]
 struct SampleData {
@@ -41,8 +54,8 @@ fn main_gauge() {
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags = &[];
-            let tags = &[tags_list[(index % 2)]];
+            // let tags = Vec::new();
+            let tags = vec![tags_list[(index % 2)].to_owned()];
             metric.add(data.times[index], data.values[index] as f64, tags).unwrap();
         }
     }
@@ -125,8 +138,8 @@ fn main_count() {
     {
         let _m = TimeMeasurement::new("count", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            // let tags = &[];
-            let tags = &[tags_list[(index % 2)]];
+            // let tags = Vec::new();
+            let tags = vec![tags_list[(index % 2)].to_owned()];
             metric.add(data.times[index], 1, tags).unwrap();
         }
     }
@@ -198,8 +211,8 @@ fn main_engine() {
     {
         let _m = TimeMeasurement::new("gauge & count", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
-            let tags = &[tags_list[(index % 2)]];
-            metrics_engine.gauge("cpu", data.times[index], data.values[index] as f64, tags).unwrap();
+            let tags = vec![tags_list[(index % 2)].to_owned()];
+            metrics_engine.gauge("cpu", data.times[index], data.values[index] as f64, tags.clone()).unwrap();
             metrics_engine.count("perf_events", data.times[index], 1, tags).unwrap();
         }
     }
@@ -211,10 +224,4 @@ fn main_engine() {
 
     println!("Avg: {}", metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap());
     println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap());
-}
-
-fn main() {
-    main_gauge();
-    // main_count();
-    // main_engine();
 }

@@ -10,11 +10,11 @@ pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
 #[derive(Debug)]
 pub enum MetricsEngineError {
     FailedToCreateBaseDir(std::io::Error),
-    FailedToLoadMetrics(std::io::Error),
+    FailedToLoadMetricDefinitions(std::io::Error),
+    FailedToSaveMetricDefinitions(std::io::Error),
     MetricAlreadyExists,
     MetricNotFound,
     WrongMetricType,
-    FailedToSaveMetricDefinitions(std::io::Error),
     Metric(MetricError)
 }
 
@@ -51,7 +51,7 @@ impl MetricsEngine {
         };
 
         let mut metrics = FnvHashMap::default();
-        for (metric_name, metric_type) in load().map_err(|err| MetricsEngineError::FailedToLoadMetrics(err))? {
+        for (metric_name, metric_type) in load().map_err(|err| MetricsEngineError::FailedToLoadMetricDefinitions(err))? {
             let metric = match metric_type {
                 MetricType::Gauge => Metric::Gauge(DefaultGaugeMetric::from_existing(&base_path.join(&metric_name))?),
                 MetricType::Count => Metric::Count(DefaultCountMetric::from_existing(&base_path.join(&metric_name))?),
@@ -66,6 +66,14 @@ impl MetricsEngine {
                 metrics
             }
         )
+    }
+
+    pub fn new_or_from_existing(base_path: &Path) -> MetricsEngineResult<MetricsEngine> {
+        if base_path.join("metrics.json").exists() {
+            MetricsEngine::from_existing(base_path)
+        } else {
+            MetricsEngine::new(base_path)
+        }
     }
 
     pub fn add_gauge_metric(&mut self, name: &str) -> MetricsEngineResult<()> {
@@ -108,7 +116,7 @@ impl MetricsEngine {
         Ok(())
     }
 
-    pub fn gauge(&mut self, metric: &str, time: f64, value: f64, tags: &[&str]) -> MetricsEngineResult<()> {
+    pub fn gauge(&mut self, metric: &str, time: f64, value: f64, tags: Vec<String>) -> MetricsEngineResult<()> {
         if let Metric::Gauge(metric) = self.metrics.get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             metric.add(time, value, tags)?;
             Ok(())
@@ -117,7 +125,7 @@ impl MetricsEngine {
         }
     }
 
-    pub fn count(&mut self, metric: &str, time: f64, count: u16, tags: &[&str]) -> MetricsEngineResult<()> {
+    pub fn count(&mut self, metric: &str, time: f64, count: u16, tags: Vec<String>) -> MetricsEngineResult<()> {
         if let Metric::Count(metric) = self.metrics.get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             metric.add(time, count, tags)?;
             Ok(())
