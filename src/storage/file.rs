@@ -180,19 +180,17 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             }
 
             self.storage_file.try_grow_file(std::mem::size_of::<Block<E>>())?;
-            *self.active_block_mut() = Block {
-                size: std::mem::size_of::<Block<E>>(),
-                start_time: time,
-                end_time: time,
-                num_sub_blocks: 0,
-                next_sub_block_offset: 0,
-                sub_blocks: [Default::default(); NUM_SUB_BLOCKS],
-                _phantom: Default::default()
-            };
+            *self.active_block_mut() = Block::new(time);
             (*self.header_mut()).num_blocks += 1;
+
+            let header_ptr = self.header_mut() as *const u8;
+            self.storage_file.sync(header_ptr, std::mem::size_of::<Header>(), false)?;
 
             self.index_file.try_grow_file(std::mem::size_of::<usize>())?;
             *self.index_mut().add((*self.header()).active_block_index) = (*self.header()).active_block_start;
+
+            let index_ptr = self.index_mut().add((*self.header()).active_block_index) as *const u8;
+            self.index_file.sync(index_ptr, std::mem::size_of::<usize>(), false)?;
         }
 
         Ok(())
@@ -285,6 +283,18 @@ struct Block<E: Copy> {
 }
 
 impl<E: Copy> Block<E> {
+    pub fn new(time: Time) -> Block<E> {
+        Block {
+            size: std::mem::size_of::<Block<E>>(),
+            start_time: time,
+            end_time: time,
+            num_sub_blocks: 0,
+            next_sub_block_offset: 0,
+            sub_blocks: [Default::default(); NUM_SUB_BLOCKS],
+            _phantom: Default::default()
+        }
+    }
+
     pub fn compact(&mut self) -> usize {
         let block_ptr = self as *const Block<E>;
 
