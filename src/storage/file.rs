@@ -86,9 +86,12 @@ impl<E: Copy> MetricStorageFile<E> {
                         allocate_file(block_ptr, increased_capacity as usize * std::mem::size_of::<Datapoint<E>>())?;
                         Ok(sub_block)
                     } else {
-                        if let Some((new_sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, desired_capacity) {
+                        if let Some((new_sub_block, allocated, new_sub_block_index)) = (*block_ptr).allocate_sub_block(tags, desired_capacity) {
                             if allocated {
-                                allocate_file(block_ptr, new_sub_block.datapoints_size())?;
+                                if let Err(err) = allocate_file(block_ptr, new_sub_block.datapoints_size()) {
+                                    (*block_ptr).undo_sub_block_allocation(new_sub_block_index);
+                                    return Err(err);
+                                }
                             }
 
                             new_sub_block.replace_at(block_ptr, sub_block);
@@ -99,9 +102,12 @@ impl<E: Copy> MetricStorageFile<E> {
                     }
                 }
             } else {
-                if let Some((sub_block, allocated)) = (*block_ptr).allocate_sub_block(tags, default_capacity) {
+                if let Some((sub_block, allocated, sub_block_index)) = (*block_ptr).allocate_sub_block(tags, default_capacity) {
                     if allocated {
-                        allocate_file(block_ptr, sub_block.datapoints_size())?;
+                        if let Err(err) = allocate_file(block_ptr, sub_block.datapoints_size()) {
+                            (*block_ptr).undo_sub_block_allocation(sub_block_index);
+                            return Err(err);
+                        }
                     }
 
                     Ok(sub_block)
@@ -351,11 +357,11 @@ impl<E: Copy> Block<E> {
         None
     }
 
-    pub fn allocate_sub_block(&mut self, tags: Tags, capacity: u32) -> Option<(&mut SubBlock<E>, bool)> {
-        for sub_block in &mut self.sub_blocks {
+    pub fn allocate_sub_block(&mut self, tags: Tags, capacity: u32) -> Option<(&mut SubBlock<E>, bool, usize)> {
+        for (sub_block_index, sub_block) in self.sub_blocks.iter_mut().enumerate() {
             if sub_block.count == 0 && sub_block.capacity >= capacity {
                 sub_block.tags = tags;
-                return Some((sub_block, false));
+                return Some((sub_block, false, sub_block_index));
             }
 
             if sub_block.capacity == 0 {
@@ -365,11 +371,18 @@ impl<E: Copy> Block<E> {
                 sub_block.tags = tags;
                 self.num_sub_blocks += 1;
                 self.next_sub_block_offset += sub_block.datapoints_size();
-                return Some((sub_block, true));
+                return Some((sub_block, true, sub_block_index));
             }
         }
 
         None
+    }
+
+    pub fn undo_sub_block_allocation(&mut self, index: usize) {
+        let size = self.sub_blocks[index].capacity as usize;
+        self.sub_blocks[index].clear();
+        self.num_sub_blocks -= 1;
+        self.next_sub_block_offset -= size;
     }
 
     pub fn try_extend(&mut self, index: usize, sub_block: &mut SubBlock<E>, new_capacity: u32) -> Option<u32> {
