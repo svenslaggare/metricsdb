@@ -189,22 +189,24 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
 
     fn create_block(&mut self, time: Time) -> Result<(), MetricError> {
         unsafe {
+            self.storage_file.try_grow_file(std::mem::size_of::<Block<E>>())?;
+            self.index_file.try_grow_file(std::mem::size_of::<usize>())?;
+
             if self.has_blocks() {
                 let shrink_amount = (*self.active_block_mut()).compact();
                 self.storage_file.shrink(shrink_amount);
                 self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
+
                 (*self.header_mut()).active_block_start += (*self.active_block()).size;
                 (*self.header_mut()).active_block_index += 1;
             }
 
-            self.storage_file.try_grow_file(std::mem::size_of::<Block<E>>())?;
             *self.active_block_mut() = Block::new(time);
             (*self.header_mut()).num_blocks += 1;
 
             let header_ptr = self.header_mut() as *const u8;
             self.storage_file.sync(header_ptr, std::mem::size_of::<Header>(), false)?;
 
-            self.index_file.try_grow_file(std::mem::size_of::<usize>())?;
             *self.index_mut().add((*self.header()).active_block_index) = (*self.header()).active_block_start;
 
             let index_ptr = self.index_mut().add((*self.header()).active_block_index) as *const u8;
