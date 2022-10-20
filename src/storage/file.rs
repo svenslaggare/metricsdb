@@ -307,18 +307,20 @@ impl<E: Copy> Block<E> {
         }
 
         let mut new_size = std::mem::size_of_val(self);
-        self.num_sub_blocks = 0;
-        self.next_sub_block_offset = 0;
+        let mut num_sub_blocks = 0;
+        let mut next_sub_block_offset = 0;
         for (sub_block_index, (mut sub_block, datapoints)) in valid_sub_blocks.into_iter().enumerate() {
-            sub_block.offset = self.next_sub_block_offset;
+            sub_block.offset = next_sub_block_offset;
             sub_block.datapoints_mut(block_ptr).clone_from_slice(&datapoints);
-            self.num_sub_blocks += 1;
-            self.next_sub_block_offset += sub_block.datapoints_size();
+            num_sub_blocks += 1;
+            next_sub_block_offset += sub_block.datapoints_size();
 
             self.sub_blocks[sub_block_index] = sub_block;
             new_size += sub_block.datapoints_size();
         }
 
+        self.num_sub_blocks = num_sub_blocks;
+        self.next_sub_block_offset = next_sub_block_offset;
         let decreased = self.size - new_size;
         self.size = new_size;
         decreased
