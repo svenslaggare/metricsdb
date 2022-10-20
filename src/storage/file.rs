@@ -71,49 +71,32 @@ impl<E: Copy> MetricStorageFile<E> {
         let growth_factor = 2;
 
         unsafe {
-            let mut allocate_file = |active_block: *mut Block<E>, size: usize| -> MetricResult<()> {
-                self.storage_file.try_grow_file(size).map_err(|err| MetricError::MemoryFileError(err))?;
-                (*active_block).size += size;
-                Ok(())
-            };
-
             if let Some((sub_block_index, sub_block)) = (*block_ptr).find_sub_block(tags) {
                 if sub_block.count < sub_block.capacity {
                     Ok(sub_block)
                 } else {
                     let desired_capacity = sub_block.count * growth_factor;
-                    if let Some(increased_capacity) = (*block_ptr).try_extend(sub_block_index, sub_block, desired_capacity) {
-                        allocate_file(block_ptr, increased_capacity as usize * std::mem::size_of::<Datapoint<E>>())?;
+                    if let Some(increased_capacity) = (*block_ptr).try_extend(&mut self.storage_file, sub_block_index, sub_block, desired_capacity)? {
+                        let size = increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
+                        (*block_ptr).size += size;
                         Ok(sub_block)
                     } else {
-                        if let Some((new_sub_block, allocated, new_sub_block_index)) = (*block_ptr).allocate_sub_block(tags, desired_capacity) {
-                            if allocated {
-                                if let Err(err) = allocate_file(block_ptr, new_sub_block.datapoints_size()) {
-                                    (*block_ptr).undo_sub_block_allocation(new_sub_block_index);
-                                    return Err(err);
-                                }
-                            }
-
-                            new_sub_block.replace_at(block_ptr, sub_block);
-                            Ok(new_sub_block)
-                        } else {
-                            Err(MetricError::FailedToAllocateSubBlock)
+                        let (new_sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, desired_capacity)?;
+                        if allocated {
+                            (*block_ptr).size += new_sub_block.datapoints_size();
                         }
+
+                        new_sub_block.replace_at(block_ptr, sub_block);
+                        Ok(new_sub_block)
                     }
                 }
             } else {
-                if let Some((sub_block, allocated, sub_block_index)) = (*block_ptr).allocate_sub_block(tags, default_capacity) {
-                    if allocated {
-                        if let Err(err) = allocate_file(block_ptr, sub_block.datapoints_size()) {
-                            (*block_ptr).undo_sub_block_allocation(sub_block_index);
-                            return Err(err);
-                        }
-                    }
-
-                    Ok(sub_block)
-                } else {
-                    Err(MetricError::FailedToAllocateSubBlock)
+                let (sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, default_capacity)?;
+                if allocated {
+                    (*block_ptr).size += sub_block.datapoints_size();
                 }
+
+                Ok(sub_block)
             }
         }
     }
@@ -357,43 +340,51 @@ impl<E: Copy> Block<E> {
         None
     }
 
-    pub fn allocate_sub_block(&mut self, tags: Tags, capacity: u32) -> Option<(&mut SubBlock<E>, bool, usize)> {
-        for (sub_block_index, sub_block) in self.sub_blocks.iter_mut().enumerate() {
+    pub fn allocate_sub_block(&mut self,
+                              storage_file: &mut MemoryFile,
+                              tags: Tags,
+                              capacity: u32) -> MetricResult<(&mut SubBlock<E>, bool)> {
+        for sub_block in self.sub_blocks.iter_mut() {
             if sub_block.count == 0 && sub_block.capacity >= capacity {
                 sub_block.tags = tags;
-                return Some((sub_block, false, sub_block_index));
+                return Ok((sub_block, false));
             }
 
             if sub_block.capacity == 0 {
+                storage_file.try_grow_file(
+                    capacity as usize * std::mem::size_of::<Datapoint<E>>()
+                ).map_err(|err| MetricError::MemoryFileError(err))?;
+
                 sub_block.offset = self.next_sub_block_offset;
                 sub_block.capacity = capacity;
                 sub_block.count = 0;
                 sub_block.tags = tags;
                 self.num_sub_blocks += 1;
                 self.next_sub_block_offset += sub_block.datapoints_size();
-                return Some((sub_block, true, sub_block_index));
+                return Ok((sub_block, true));
             }
         }
 
-        None
+        Err(MetricError::FailedToAllocateSubBlock)
     }
 
-    pub fn undo_sub_block_allocation(&mut self, index: usize) {
-        let size = self.sub_blocks[index].capacity as usize;
-        self.sub_blocks[index].clear();
-        self.num_sub_blocks -= 1;
-        self.next_sub_block_offset -= size;
-    }
-
-    pub fn try_extend(&mut self, index: usize, sub_block: &mut SubBlock<E>, new_capacity: u32) -> Option<u32> {
+    pub fn try_extend(&mut self,
+                      storage_file: &mut MemoryFile,
+                      index: usize,
+                      sub_block: &mut SubBlock<E>,
+                      new_capacity: u32) -> MetricResult<Option<u32>> {
         if index == self.num_sub_blocks - 1 {
             assert!(new_capacity > sub_block.capacity);
             let increased_capacity = new_capacity - sub_block.capacity;
+
+            let size = increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
+            storage_file.try_grow_file(size).map_err(|err| MetricError::MemoryFileError(err))?;
+
             self.next_sub_block_offset += increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
             sub_block.capacity = new_capacity;
-            Some(increased_capacity)
+            Ok(Some(increased_capacity))
         } else {
-            None
+            Ok(None)
         }
     }
 }
