@@ -25,6 +25,7 @@ impl<E: Copy> MetricStorageFile<E> {
                 num_blocks: 0,
                 active_block_index: 0,
                 active_block_start: std::mem::size_of::<Header>(),
+                committed_block_index: None,
                 block_duration,
                 datapoint_duration
             };
@@ -185,6 +186,7 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
                 let shrink_amount = (*self.active_block_mut()).compact();
                 self.storage_file.shrink(shrink_amount);
                 self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
+                (*self.header_mut()).committed_block_index = Some((*self.header()).active_block_index);
 
                 (*self.header_mut()).active_block_start += (*self.active_block()).size;
                 (*self.header_mut()).active_block_index += 1;
@@ -267,6 +269,7 @@ struct Header {
     datapoint_duration: u64,
     active_block_index: usize,
     active_block_start: usize,
+    committed_block_index: Option<usize>
 }
 
 const NUM_SUB_BLOCKS: usize = 150;
