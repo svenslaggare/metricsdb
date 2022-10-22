@@ -33,6 +33,8 @@ pub trait MetricStorage<E: Copy> {
     }
 
     fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint<E>])> + 'a>>;
+
+    fn scheduled(&mut self);
 }
 
 pub mod file;

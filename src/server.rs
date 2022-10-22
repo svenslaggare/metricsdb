@@ -1,6 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc};
+use std::time::Duration;
 
 use serde_json::json;
 use serde::Deserialize;
@@ -9,16 +10,26 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::{Json, Router};
 use axum::routing::{post, put};
+use tokio::time;
 
 use crate::{MetricsEngine, Query, TimeRange};
 
 pub async fn main() {
-    let app = Router::with_state(Arc::new(AppState::new()))
+    let app_state = Arc::new(AppState::new());
+    let app = Router::with_state(app_state.clone())
         .route("/metrics/gauge", post(add_gauge_metric))
         .route("/metrics/gauge/:name", put(add_gauge_metric_value))
         .route("/metrics/count", post(add_count_metric))
         .route("/metrics/query/:name", post(metric_query))
     ;
+
+    tokio::spawn(async move {
+        let mut duration = time::interval(Duration::from_secs_f64(1.0));
+        loop {
+            duration.tick().await;
+            app_state.metrics_engine.scheduled();
+        }
+    });
 
     let address = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 9090);
     println!("Listing on {}", address);

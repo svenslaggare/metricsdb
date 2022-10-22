@@ -294,4 +294,8 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
             }
         )
     }
+
+    pub fn scheduled(&mut self) {
+        self.primary_tags_storage.scheduled();
+    }
 }

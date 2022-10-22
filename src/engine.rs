@@ -162,6 +162,16 @@ impl MetricsEngine {
             Metric::Count(metric) => metric.sum(query)
         }
     }
+
+    pub fn scheduled(&self) {
+        let mut metrics_guard = self.metrics.write().unwrap();
+        for metric in metrics_guard.values_mut() {
+            match metric {
+                Metric::Gauge(metric) => metric.scheduled(),
+                Metric::Count(metric) => metric.scheduled()
+            }
+        }
+    }
 }
 
 pub enum Metric {

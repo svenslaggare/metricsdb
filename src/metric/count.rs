@@ -191,4 +191,8 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
             }
         )
     }
+
+    pub fn scheduled(&mut self) {
+        self.primary_tags_storage.scheduled();
+    }
 }

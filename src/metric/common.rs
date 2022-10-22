@@ -119,6 +119,12 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     pub fn return_tags(&mut self, primary_tag_key: PrimaryTag, primary_tag: PrimaryTagMetric<TStorage, E>) {
         self.tags.insert(primary_tag_key, primary_tag);
     }
+
+    pub fn scheduled(&mut self) {
+        for primary_tag in self.tags.values_mut() {
+            primary_tag.storage.scheduled();
+        }
+    }
 }
 
 pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {

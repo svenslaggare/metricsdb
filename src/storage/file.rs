@@ -103,17 +103,17 @@ impl<E: Copy> FileMetricStorage<E> {
         }
     }
 
-    fn try_sync_active_block(&mut self) -> MetricResult<()> {
+    fn try_sync_active_block(&mut self) {
         if self.requires_sync && ((std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL) {
-            unsafe {
-                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
+            let ok = unsafe {
+                self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false).is_ok()
+            };
+
+            if ok {
+                self.last_sync = std::time::Instant::now();
+                self.requires_sync = false;
             }
-
-            self.last_sync = std::time::Instant::now();
-            self.requires_sync = false;
         }
-
-        Ok(())
     }
 }
 
@@ -220,7 +220,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
             self.requires_sync = true;
         }
 
-        self.try_sync_active_block()?;
+        self.try_sync_active_block();
 
         Ok(())
     }
@@ -237,6 +237,10 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
                 }
             )
         )
+    }
+
+    fn scheduled(&mut self) {
+        self.try_sync_active_block();
     }
 }
 
