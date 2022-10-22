@@ -7,7 +7,7 @@ def main():
 
     for indices in chunks(range(len(output["times"])), 1000):
         entries = [{"time": output["times"][index], "value": output["values"][index], "tags": []} for index in indices]
-        response = requests.put("http://localhost:9000/metrics/gauge/cpu", json=entries)
+        response = requests.put("http://localhost:9090/metrics/gauge/cpu", json=entries)
         response.raise_for_status()
 
 def chunks(lst, n):

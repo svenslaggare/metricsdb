@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use fnv::FnvHashMap;
 use serde::{Serialize, Deserialize};
@@ -27,7 +28,7 @@ impl From<MetricError> for MetricsEngineError {
 
 pub struct MetricsEngine {
     base_path: PathBuf,
-    metrics: FnvHashMap<String, Metric>
+    metrics: RwLock<FnvHashMap<String, Metric>>
 }
 
 impl MetricsEngine {
@@ -39,7 +40,7 @@ impl MetricsEngine {
         Ok(
             MetricsEngine {
                 base_path: base_path.to_owned(),
-                metrics: FnvHashMap::default()
+                metrics: RwLock::new(FnvHashMap::default())
             }
         )
     }
@@ -64,7 +65,7 @@ impl MetricsEngine {
         Ok(
             MetricsEngine {
                 base_path: base_path.to_owned(),
-                metrics
+                metrics: RwLock::new(metrics)
             }
         )
     }
@@ -77,29 +78,42 @@ impl MetricsEngine {
         }
     }
 
-    pub fn add_gauge_metric(&mut self, name: &str) -> MetricsEngineResult<()> {
-        if self.metrics.contains_key(name) {
-            return Err(MetricsEngineError::MetricAlreadyExists);
+    pub fn add_gauge_metric(&self, name: &str) -> MetricsEngineResult<()> {
+        {
+            let mut metrics_guard = self.metrics.write().unwrap();
+            if metrics_guard.contains_key(name) {
+                return Err(MetricsEngineError::MetricAlreadyExists);
+            }
+
+            metrics_guard.insert(name.to_string(), Metric::Gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?));
         }
 
-        self.metrics.insert(name.to_string(), Metric::Gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?));
         self.save_defined_metrics()?;
         Ok(())
     }
 
-    pub fn add_count_metric(&mut self, name: &str) -> MetricsEngineResult<()> {
-        if self.metrics.contains_key(name) {
-            return Err(MetricsEngineError::MetricAlreadyExists);
+    pub fn add_count_metric(&self, name: &str) -> MetricsEngineResult<()> {
+        {
+            let mut metrics_guard = self.metrics.write().unwrap();
+            if metrics_guard.contains_key(name) {
+                return Err(MetricsEngineError::MetricAlreadyExists);
+            }
+
+            metrics_guard.insert(name.to_string(), Metric::Count(DefaultCountMetric::new(&self.base_path.join(name))?));
+            self.save_defined_metrics()?;
         }
 
-        self.metrics.insert(name.to_string(), Metric::Count(DefaultCountMetric::new(&self.base_path.join(name))?));
-        self.save_defined_metrics()?;
         Ok(())
     }
 
     fn save_defined_metrics(&self) -> MetricsEngineResult<()> {
         let save = || -> std::io::Result<()> {
-            let content = serde_json::to_string(&self.metrics.iter().map(|(name, metric)| (name, metric.metric_type())).collect::<Vec<_>>())?;
+            let content = serde_json::to_string(&
+                self.metrics.read().unwrap()
+                    .iter()
+                    .map(|(name, metric)| (name, metric.metric_type()))
+                    .collect::<Vec<_>>()
+            )?;
             std::fs::write(&self.base_path.join("metrics.json"), &content)?;
             Ok(())
         };
@@ -108,8 +122,8 @@ impl MetricsEngine {
         Ok(())
     }
 
-    pub fn add_primary_tag(&mut self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
-        match self.metrics.get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+    pub fn add_primary_tag(&self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
+        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,
             Metric::Count(metric) => metric.add_primary_tag(tag)?,
         }
@@ -117,8 +131,8 @@ impl MetricsEngine {
         Ok(())
     }
 
-    pub fn gauge(&mut self, metric: &str, time: f64, value: f64, tags: Vec<String>) -> MetricsEngineResult<()> {
-        if let Metric::Gauge(metric) = self.metrics.get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+    pub fn gauge(&self, metric: &str, time: f64, value: f64, tags: Vec<String>) -> MetricsEngineResult<()> {
+        if let Metric::Gauge(metric) = self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             metric.add(time, value, tags)?;
             Ok(())
         } else {
@@ -126,8 +140,8 @@ impl MetricsEngine {
         }
     }
 
-    pub fn count(&mut self, metric: &str, time: f64, count: u16, tags: Vec<String>) -> MetricsEngineResult<()> {
-        if let Metric::Count(metric) = self.metrics.get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+    pub fn count(&self, metric: &str, time: f64, count: u16, tags: Vec<String>) -> MetricsEngineResult<()> {
+        if let Metric::Count(metric) = self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             metric.add(time, count, tags)?;
             Ok(())
         } else {
@@ -136,14 +150,14 @@ impl MetricsEngine {
     }
 
     pub fn average(&self, metric: &str, query: Query) -> Option<f64> {
-        match self.metrics.get(metric)? {
+        match self.metrics.read().unwrap().get(metric)? {
             Metric::Gauge(metric) => metric.average(query),
             Metric::Count(metric) => metric.average(query)
         }
     }
 
     pub fn sum(&self, metric: &str, query: Query) -> Option<f64> {
-        match self.metrics.get(metric)? {
+        match self.metrics.read().unwrap().get(metric)? {
             Metric::Gauge(metric) => metric.sum(query),
             Metric::Count(metric) => metric.sum(query)
         }

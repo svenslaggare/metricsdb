@@ -323,7 +323,7 @@ fn test_metrics_engine1() {
     let end_time = start_time + 2.0 * 3600.0;
     let tags_list = vec!["tag:T1", "tag:T2"];
 
-    let mut metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
     metrics_engine.add_gauge_metric("cpu").unwrap();
     metrics_engine.add_count_metric("perf_events").unwrap();
 

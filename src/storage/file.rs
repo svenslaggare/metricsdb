@@ -280,8 +280,7 @@ struct Block<E: Copy> {
     end_time: Time,
     num_sub_blocks: usize,
     next_sub_block_offset: usize,
-    sub_blocks: [SubBlock<E>; NUM_SUB_BLOCKS],
-    _phantom: PhantomData<E>
+    sub_blocks: [SubBlock<E>; NUM_SUB_BLOCKS]
 }
 
 impl<E: Copy> Block<E> {
@@ -292,8 +291,7 @@ impl<E: Copy> Block<E> {
             end_time: time,
             num_sub_blocks: 0,
             next_sub_block_offset: 0,
-            sub_blocks: [Default::default(); NUM_SUB_BLOCKS],
-            _phantom: Default::default()
+            sub_blocks: [Default::default(); NUM_SUB_BLOCKS]
         }
     }
 
@@ -303,7 +301,10 @@ impl<E: Copy> Block<E> {
         let mut valid_sub_blocks = Vec::new();
         for sub_block in &mut self.sub_blocks[..self.num_sub_blocks] {
             if sub_block.count > 0 {
-                valid_sub_blocks.push((sub_block.clone(), sub_block.datapoints(block_ptr).iter().cloned().collect::<Vec<_>>()));
+                valid_sub_blocks.push((
+                    sub_block.clone(),
+                    sub_block.datapoints(block_ptr).iter().cloned().collect::<Vec<_>>()
+                ));
             }
 
             sub_block.clear();

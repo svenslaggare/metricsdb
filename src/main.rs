@@ -22,16 +22,16 @@ mod server;
 #[cfg(test)]
 mod integration_tests;
 
-fn main() {
-    main_gauge();
-    // main_count();
-    // main_engine();
-}
-
-// #[tokio::main]
-// async fn main() {
-//     server::main().await
+// fn main() {
+//     main_gauge();
+//     // main_count();
+//     // main_engine();
 // }
+
+#[tokio::main]
+async fn main() {
+    server::main().await
+}
 
 #[derive(Deserialize)]
 struct SampleData {
