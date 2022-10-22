@@ -7,10 +7,10 @@ use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingS
 use crate::{PrimaryTag, Query, TimeRange};
 use crate::metric::metric_operations;
 use crate::model::{Datapoint, MetricError, MetricResult, Time, TIME_SCALE};
-use crate::storage::file::MetricStorageFile;
+use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
 
-pub type DefaultCountMetric = CountMetric<MetricStorageFile<u32>>;
+pub type DefaultCountMetric = CountMetric<FileMetricStorage<u32>>;
 
 pub struct CountMetric<TStorage: MetricStorage<u32>> {
     primary_tags_storage: PrimaryTagsStorage<TStorage, u32>

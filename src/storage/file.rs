@@ -11,7 +11,7 @@ const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
 const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
 const SYNC_INTERVAL: Duration = Duration::new(2, 0);
 
-pub struct MetricStorageFile<E> {
+pub struct FileMetricStorage<E> {
     storage_file: MemoryFile,
     index_file: MemoryFile,
     _phantom: PhantomData<E>,
@@ -19,7 +19,7 @@ pub struct MetricStorageFile<E> {
     requires_sync: bool
 }
 
-impl<E: Copy> MetricStorageFile<E> {
+impl<E: Copy> FileMetricStorage<E> {
     fn initialize(&mut self, block_duration: u64, datapoint_duration: u64) {
         unsafe {
             *self.header_mut() = Header {
@@ -117,9 +117,9 @@ impl<E: Copy> MetricStorageFile<E> {
     }
 }
 
-impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
+impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> Result<Self, MetricError> {
-        let mut storage = MetricStorageFile {
+        let mut storage = FileMetricStorage {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true)?,
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true)?,
             _phantom: Default::default(),
@@ -133,7 +133,7 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
 
     fn from_existing(base_path: &Path) -> Result<Self, MetricError> {
         Ok(
-            MetricStorageFile {
+            FileMetricStorage {
                 storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false)?,
                 index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false)?,
                 _phantom: Default::default(),

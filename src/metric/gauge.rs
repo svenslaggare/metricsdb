@@ -7,10 +7,10 @@ use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, Str
 use crate::{PrimaryTag, Query};
 use crate::metric::metric_operations;
 use crate::model::{Datapoint, MetricError, MetricResult, Time, TIME_SCALE};
-use crate::storage::file::MetricStorageFile;
+use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
 
-pub type DefaultGaugeMetric = GaugeMetric<MetricStorageFile<f32>>;
+pub type DefaultGaugeMetric = GaugeMetric<FileMetricStorage<f32>>;
 
 pub struct GaugeMetric<TStorage: MetricStorage<f32>> {
     primary_tags_storage: PrimaryTagsStorage<TStorage, f32>
