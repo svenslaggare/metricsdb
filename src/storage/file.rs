@@ -15,7 +15,8 @@ pub struct MetricStorageFile<E> {
     storage_file: MemoryFile,
     index_file: MemoryFile,
     _phantom: PhantomData<E>,
-    last_sync: std::time::Instant
+    last_sync: std::time::Instant,
+    requires_sync: bool
 }
 
 impl<E: Copy> MetricStorageFile<E> {
@@ -103,12 +104,13 @@ impl<E: Copy> MetricStorageFile<E> {
     }
 
     fn try_sync_active_block(&mut self) -> MetricResult<()> {
-        if (std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL {
+        if self.requires_sync && ((std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL) {
             unsafe {
                 self.storage_file.sync(self.active_block() as *const u8, (*self.active_block()).size, false)?;
             }
 
             self.last_sync = std::time::Instant::now();
+            self.requires_sync = false;
         }
 
         Ok(())
@@ -121,7 +123,8 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
             storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, true)?,
             index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, true)?,
             _phantom: Default::default(),
-            last_sync: std::time::Instant::now()
+            last_sync: std::time::Instant::now(),
+            requires_sync: false
         };
 
         storage.initialize(block_duration, datapoint_duration);
@@ -134,7 +137,8 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
                 storage_file: MemoryFile::new(&base_path.join(Path::new("storage")), STORAGE_MAX_SIZE, false)?,
                 index_file: MemoryFile::new(&base_path.join(Path::new("index")), INDEX_MAX_SIZE, false)?,
                 _phantom: Default::default(),
-                last_sync: std::time::Instant::now()
+                last_sync: std::time::Instant::now(),
+                requires_sync: false
             }
         )
     }
@@ -194,11 +198,10 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
 
             *self.active_block_mut() = Block::new(time);
             (*self.header_mut()).num_blocks += 1;
+            *self.index_mut().add((*self.header()).active_block_index) = (*self.header()).active_block_start;
 
             let header_ptr = self.header_mut() as *const u8;
             self.storage_file.sync(header_ptr, std::mem::size_of::<Header>(), false)?;
-
-            *self.index_mut().add((*self.header()).active_block_index) = (*self.header()).active_block_start;
 
             let index_ptr = self.index_mut().add((*self.header()).active_block_index) as *const u8;
             self.index_file.sync(index_ptr, std::mem::size_of::<usize>(), false)?;
@@ -214,6 +217,7 @@ impl<E: Copy> MetricStorage<E> for MetricStorageFile<E> {
 
             let sub_block = self.allocate_sub_block_for_insertion(active_block, tags)?;
             sub_block.add_datapoint(active_block, datapoint);
+            self.requires_sync = true;
         }
 
         self.try_sync_active_block()?;

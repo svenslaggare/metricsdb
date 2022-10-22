@@ -100,9 +100,9 @@ impl MetricsEngine {
             }
 
             metrics_guard.insert(name.to_string(), Metric::Count(DefaultCountMetric::new(&self.base_path.join(name))?));
-            self.save_defined_metrics()?;
         }
 
+        self.save_defined_metrics()?;
         Ok(())
     }
 
