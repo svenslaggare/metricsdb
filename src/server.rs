@@ -12,15 +12,18 @@ use axum::{Json, Router};
 use axum::routing::{post, put};
 use tokio::time;
 
-use crate::{MetricsEngine, Query, TimeRange};
+use crate::{AddCountValue, MetricsEngine, PrimaryTag, Query, TimeRange};
+use crate::engine::AddGaugeValue;
 
 pub async fn main() {
     let app_state = Arc::new(AppState::new());
     let app = Router::with_state(app_state.clone())
-        .route("/metrics/gauge", post(add_gauge_metric))
+        .route("/metrics/gauge", post(create_gauge_metric))
         .route("/metrics/gauge/:name", put(add_gauge_metric_value))
-        .route("/metrics/count", post(add_count_metric))
+        .route("/metrics/count", post(create_count_metric))
+        .route("/metrics/count/:name", put(add_count_metric_value))
         .route("/metrics/query/:name", post(metric_query))
+        .route("/metrics/primary-tag/:name", post(add_primary_tag))
     ;
 
     tokio::spawn(async move {
@@ -52,12 +55,12 @@ impl AppState {
 }
 
 #[derive(Deserialize)]
-struct AddMetric {
+struct CreateMetric {
     name: String
 }
 
-async fn add_gauge_metric(State(state): State<Arc<AppState>>,
-                          Json(input): Json<AddMetric>) -> impl IntoResponse {
+async fn create_gauge_metric(State(state): State<Arc<AppState>>,
+                             Json(input): Json<CreateMetric>) -> impl IntoResponse {
     let success = state.metrics_engine.add_gauge_metric(&input.name).is_ok();
     Json(
         json!({
@@ -66,8 +69,8 @@ async fn add_gauge_metric(State(state): State<Arc<AppState>>,
     )
 }
 
-async fn add_count_metric(State(state): State<Arc<AppState>>,
-                          Json(input): Json<AddMetric>) -> impl IntoResponse {
+async fn create_count_metric(State(state): State<Arc<AppState>>,
+                             Json(input): Json<CreateMetric>) -> impl IntoResponse {
     let success = state.metrics_engine.add_count_metric(&input.name).is_ok();
     Json(
         json!({
@@ -77,28 +80,39 @@ async fn add_count_metric(State(state): State<Arc<AppState>>,
 }
 
 #[derive(Deserialize)]
-struct AddGaugeMetricValue {
-    time: f64,
-    value: f64,
-    tags: Vec<String>
+struct AddPrimaryTag {
+    tag: String
+}
+
+async fn add_primary_tag(State(state): State<Arc<AppState>>,
+                         Path(name): Path<String>,
+                         Json(primary_tag): Json<AddPrimaryTag>) -> impl IntoResponse {
+    let success = state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag)).is_ok();
+    Json(
+        json!({
+            "success": success
+        })
+    )
 }
 
 async fn add_gauge_metric_value(State(state): State<Arc<AppState>>,
                                 Path(name): Path<String>,
-                                Json(metric_values): Json<Vec<AddGaugeMetricValue>>) -> impl IntoResponse {
-    for entry in metric_values {
-        if !state.metrics_engine.gauge(&name, entry.time, entry.value, entry.tags).is_ok() {
-            return Json(
-                json!({
-                    "success": false
-                })
-            );
-        }
-    }
-
+                                Json(metric_values): Json<Vec<AddGaugeValue>>) -> impl IntoResponse {
+    let success = state.metrics_engine.gauge(&name, metric_values.into_iter()).is_ok();
     Json(
         json!({
-            "success": true
+            "success": success
+        })
+    )
+}
+
+async fn add_count_metric_value(State(state): State<Arc<AppState>>,
+                                Path(name): Path<String>,
+                                Json(metric_values): Json<Vec<AddCountValue>>) -> impl IntoResponse {
+    let success = state.metrics_engine.count(&name, metric_values.into_iter()).is_ok();
+    Json(
+        json!({
+            "success": success
         })
     )
 }

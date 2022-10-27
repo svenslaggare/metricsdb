@@ -5,7 +5,8 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use tempfile::tempdir;
 
-use crate::{DefaultCountMetric, DefaultGaugeMetric, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange, TransformOperation};
+use crate::{AddGaugeValue, DefaultCountMetric, DefaultGaugeMetric, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange, TransformOperation};
+use crate::engine::AddCountValue;
 
 #[derive(Deserialize)]
 struct SampleData {
@@ -329,8 +330,8 @@ fn test_metrics_engine1() {
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
-        metrics_engine.gauge("cpu", SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone()).unwrap();
-        metrics_engine.count("perf_events", SAMPLE_DATA.times[index], 1, tags).unwrap();
+        metrics_engine.gauge("cpu", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+        metrics_engine.count("perf_events", [AddCountValue::new(SAMPLE_DATA.times[index], 1, tags)].into_iter()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;

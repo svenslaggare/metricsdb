@@ -26,6 +26,40 @@ impl From<MetricError> for MetricsEngineError {
     }
 }
 
+#[derive(Deserialize)]
+pub struct AddGaugeValue {
+    pub time: f64,
+    pub value: f64,
+    pub tags: Vec<String>
+}
+
+impl AddGaugeValue {
+    pub fn new(time: f64, value: f64, tags: Vec<String>) -> AddGaugeValue {
+        AddGaugeValue {
+            time,
+            value,
+            tags
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AddCountValue {
+    pub time: f64,
+    pub count: u16,
+    pub tags: Vec<String>
+}
+
+impl AddCountValue {
+    pub fn new(time: f64, value: u16, tags: Vec<String>) -> AddCountValue {
+        AddCountValue {
+            time,
+            count: value,
+            tags
+        }
+    }
+}
+
 pub struct MetricsEngine {
     base_path: PathBuf,
     metrics: RwLock<FnvHashMap<String, Metric>>
@@ -131,21 +165,29 @@ impl MetricsEngine {
         Ok(())
     }
 
-    pub fn gauge(&self, metric: &str, time: f64, value: f64, tags: Vec<String>) -> MetricsEngineResult<()> {
-        if let Metric::Gauge(metric) = self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
-            metric.add(time, value, tags)?;
-            Ok(())
-        } else {
-            return Err(MetricsEngineError::WrongMetricType);
+    pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<()> {
+        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+            Metric::Gauge(metric) => {
+                for value in values {
+                    metric.add(value.time, value.value, value.tags)?;
+                }
+
+                Ok(())
+            }
+            _ => Err(MetricsEngineError::WrongMetricType)
         }
     }
 
-    pub fn count(&self, metric: &str, time: f64, count: u16, tags: Vec<String>) -> MetricsEngineResult<()> {
-        if let Metric::Count(metric) = self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
-            metric.add(time, count, tags)?;
-            Ok(())
-        } else {
-            return Err(MetricsEngineError::WrongMetricType);
+    pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<()> {
+        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+            Metric::Count(metric) => {
+                for value in values {
+                    metric.add(value.time, value.count, value.tags)?;
+                }
+
+                Ok(())
+            }
+            _ => Err(MetricsEngineError::WrongMetricType)
         }
     }
 

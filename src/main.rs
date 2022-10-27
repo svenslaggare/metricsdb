@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::engine::MetricsEngine;
+use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use crate::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use crate::model::{Query, Tags, TimeRange};
 use crate::metric::count::DefaultCountMetric;
@@ -203,7 +203,7 @@ fn main_engine() {
 
     println!("n: {}", data.times.len());
 
-    let mut metrics_engine = MetricsEngine::new(&Path::new("test_metric_engine")).unwrap();
+    let metrics_engine = MetricsEngine::new(&Path::new("test_metric_engine")).unwrap();
     metrics_engine.add_gauge_metric("cpu").unwrap();
     metrics_engine.add_count_metric("perf_events").unwrap();
 
@@ -211,12 +211,12 @@ fn main_engine() {
         let _m = TimeMeasurement::new("gauge & count", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
             let tags = vec![tags_list[(index % 2)].to_owned()];
-            metrics_engine.gauge("cpu", data.times[index], data.values[index] as f64, tags.clone()).unwrap();
-            metrics_engine.count("perf_events", data.times[index], 1, tags).unwrap();
+            metrics_engine.gauge("cpu", [AddGaugeValue::new(data.times[index], data.values[index] as f64, tags.clone())].into_iter()).unwrap();
+            metrics_engine.count("perf_events", [AddCountValue::new(data.times[index], 1, tags)].into_iter()).unwrap();
         }
     }
 
-    // let mut metrics_engine = MetricsEngine::from_existing(&Path::new("test_metric_engine")).unwrap();
+    // let metrics_engine = MetricsEngine::from_existing(&Path::new("test_metric_engine")).unwrap();
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
