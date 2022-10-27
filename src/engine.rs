@@ -165,27 +165,33 @@ impl MetricsEngine {
         Ok(())
     }
 
-    pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<()> {
+    pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<usize> {
         match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             Metric::Gauge(metric) => {
+                let mut num_success = 0;
+
                 for value in values {
                     metric.add(value.time, value.value, value.tags)?;
+                    num_success += 1;
                 }
 
-                Ok(())
+                Ok(num_success)
             }
             _ => Err(MetricsEngineError::WrongMetricType)
         }
     }
 
-    pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<()> {
+    pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<usize> {
         match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
             Metric::Count(metric) => {
+                let mut num_success = 0;
+
                 for value in values {
                     metric.add(value.time, value.count, value.tags)?;
+                    num_success += 1;
                 }
 
-                Ok(())
+                Ok(num_success)
             }
             _ => Err(MetricsEngineError::WrongMetricType)
         }
