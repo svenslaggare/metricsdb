@@ -340,11 +340,11 @@ fn test_metrics_engine1() {
 
     assert_eq!(
         Some(0.6676723153748684),
-        metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time)))
+        metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap()
     );
 
     assert_eq!(
         Some(144328.0),
-        metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time)))
+        metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap()
     );
 }

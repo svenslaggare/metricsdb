@@ -122,14 +122,18 @@ async fn add_count_metric_value(State(state): State<Arc<AppState>>,
 #[derive(Deserialize)]
 enum MetricOperation {
     Average,
-    Sum
+    Sum,
+    Max,
+    Percentile
 }
 
 #[derive(Deserialize)]
 struct MetricQuery {
     operation: MetricOperation,
+    percentile: Option<i32>,
+    duration: Option<f64>,
     start: f64,
-    end: f64,
+    end: f64
 }
 
 async fn metric_query(State(state): State<Arc<AppState>>,
@@ -137,13 +141,58 @@ async fn metric_query(State(state): State<Arc<AppState>>,
                       Json(input_query): Json<MetricQuery>) -> impl IntoResponse {
     let query = Query::new(TimeRange::new(input_query.start, input_query.end));
     let value = match input_query.operation {
-        MetricOperation::Average => state.metrics_engine.average(&name, query),
-        MetricOperation::Sum => state.metrics_engine.sum(&name, query),
+        MetricOperation::Average => {
+            if let Some(duration) = input_query.duration {
+                state.metrics_engine.average_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+            } else {
+                state.metrics_engine.average(&name, query).map(|x| json!(x))
+            }
+        },
+        MetricOperation::Sum => {
+            if let Some(duration) = input_query.duration {
+                state.metrics_engine.sum_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+            } else {
+                state.metrics_engine.sum(&name, query).map(|x| json!(x))
+            }
+        },
+        MetricOperation::Max => {
+            if let Some(duration) = input_query.duration {
+                state.metrics_engine.max_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+            } else {
+                state.metrics_engine.max(&name, query).map(|x| json!(x))
+            }
+        },
+        MetricOperation::Percentile => {
+            if let Some(percentile) = input_query.percentile {
+                if let Some(duration) = input_query.duration {
+                    state.metrics_engine.percentile_in_window(&name, query, Duration::from_secs_f64(duration), percentile).map(|x| json!(x))
+                } else {
+                    state.metrics_engine.percentile(&name, query, percentile).map(|x| json!(x))
+                }
+            } else {
+                return Json(
+                    json!({
+                        "success": false
+                    })
+                );
+            }
+        }
     };
 
-    Json(
-        json!({
-            "value": value
-        })
-    )
+    match value {
+        Ok(value) => {
+            Json(
+                json!({
+                    "value": value
+                })
+            )
+        }
+        Err(_) => {
+            Json(
+                json!({
+                    "success": false
+                })
+            )
+        }
+    }
 }

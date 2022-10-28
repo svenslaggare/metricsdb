@@ -221,6 +221,6 @@ fn main_engine() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    println!("Avg: {}", metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap());
-    println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap());
+    println!("Avg: {}", metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap().unwrap());
+    println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().unwrap());
 }
