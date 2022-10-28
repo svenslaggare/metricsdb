@@ -1,5 +1,6 @@
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use fnv::FnvHashMap;
 use serde::{Serialize, Deserialize};
@@ -62,7 +63,7 @@ impl AddCountValue {
 
 pub struct MetricsEngine {
     base_path: PathBuf,
-    metrics: RwLock<FnvHashMap<String, Metric>>
+    metrics: RwLock<FnvHashMap<String, ArcMetric>>
 }
 
 impl MetricsEngine {
@@ -93,7 +94,7 @@ impl MetricsEngine {
                 MetricType::Count => Metric::Count(DefaultCountMetric::from_existing(&base_path.join(&metric_name))?),
             };
 
-            metrics.insert(metric_name, metric);
+            metrics.insert(metric_name, Arc::new(RwLock::new(metric)));
         }
 
         Ok(
@@ -119,7 +120,10 @@ impl MetricsEngine {
                 return Err(MetricsEngineError::MetricAlreadyExists);
             }
 
-            metrics_guard.insert(name.to_string(), Metric::Gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?));
+            metrics_guard.insert(
+                name.to_string(),
+                Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)
+            );
         }
 
         self.save_defined_metrics()?;
@@ -133,7 +137,10 @@ impl MetricsEngine {
                 return Err(MetricsEngineError::MetricAlreadyExists);
             }
 
-            metrics_guard.insert(name.to_string(), Metric::Count(DefaultCountMetric::new(&self.base_path.join(name))?));
+            metrics_guard.insert(
+                name.to_string(),
+                Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)
+            );
         }
 
         self.save_defined_metrics()?;
@@ -145,7 +152,7 @@ impl MetricsEngine {
             let content = serde_json::to_string(&
                 self.metrics.read().unwrap()
                     .iter()
-                    .map(|(name, metric)| (name, metric.metric_type()))
+                    .map(|(name, metric)| (name, metric.read().unwrap().metric_type()))
                     .collect::<Vec<_>>()
             )?;
             std::fs::write(&self.base_path.join("metrics.json"), &content)?;
@@ -157,7 +164,7 @@ impl MetricsEngine {
     }
 
     pub fn add_primary_tag(&self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
-        match self.metrics.write().unwrap().get_metric_mut(metric)? {
+        match self.metrics.read().unwrap().get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,
             Metric::Count(metric) => metric.add_primary_tag(tag)?,
         }
@@ -166,7 +173,7 @@ impl MetricsEngine {
     }
 
     pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.write().unwrap().get_metric_mut(metric)? {
+        match self.metrics.read().unwrap().get_metric(metric)?.clone().write().unwrap().deref_mut() {
             Metric::Gauge(metric) => {
                 let mut num_success = 0;
 
@@ -182,7 +189,7 @@ impl MetricsEngine {
     }
 
     pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.write().unwrap().get_metric_mut(metric)? {
+        match self.metrics.read().unwrap().get_metric(metric)?.clone().write().unwrap().deref_mut() {
             Metric::Count(metric) => {
                 let mut num_success = 0;
 
@@ -198,14 +205,14 @@ impl MetricsEngine {
     }
 
     pub fn average(&self, metric: &str, query: Query) -> Option<f64> {
-        match self.metrics.read().unwrap().get(metric)? {
+        match self.metrics.read().unwrap().get(metric)?.clone().read().unwrap().deref() {
             Metric::Gauge(metric) => metric.average(query),
             Metric::Count(metric) => metric.average(query)
         }
     }
 
     pub fn sum(&self, metric: &str, query: Query) -> Option<f64> {
-        match self.metrics.read().unwrap().get(metric)? {
+        match self.metrics.read().unwrap().get(metric)?.clone().read().unwrap().deref() {
             Metric::Gauge(metric) => metric.sum(query),
             Metric::Count(metric) => metric.sum(query)
         }
@@ -214,7 +221,7 @@ impl MetricsEngine {
     pub fn scheduled(&self) {
         let mut metrics_guard = self.metrics.write().unwrap();
         for metric in metrics_guard.values_mut() {
-            match metric {
+            match metric.write().unwrap().deref_mut() {
                 Metric::Gauge(metric) => metric.scheduled(),
                 Metric::Count(metric) => metric.scheduled()
             }
@@ -223,19 +230,16 @@ impl MetricsEngine {
 }
 
 trait MetricsHashMapExt {
-    fn get_metric(&self, name: &str) -> MetricsEngineResult<&Metric>;
-    fn get_metric_mut(&mut self, name: &str) -> MetricsEngineResult<&mut Metric>;
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<&ArcMetric>;
 }
 
-impl MetricsHashMapExt for FnvHashMap<String, Metric> {
-    fn get_metric(&self, name: &str) -> MetricsEngineResult<&Metric> {
+impl MetricsHashMapExt for FnvHashMap<String, ArcMetric> {
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<&ArcMetric> {
         self.get(name).ok_or_else(|| MetricsEngineError::MetricNotFound)
     }
-
-    fn get_metric_mut(&mut self, name: &str) -> MetricsEngineResult<&mut Metric> {
-        self.get_mut(name).ok_or_else(|| MetricsEngineError::MetricNotFound)
-    }
 }
+
+pub type ArcMetric = Arc<RwLock<Metric>>;
 
 pub enum Metric {
     Gauge(DefaultGaugeMetric),
@@ -243,6 +247,14 @@ pub enum Metric {
 }
 
 impl Metric {
+    pub fn gauge(metric: DefaultGaugeMetric) -> ArcMetric {
+        Arc::new(RwLock::new(Metric::Gauge(metric)))
+    }
+
+    pub fn count(metric: DefaultCountMetric) -> ArcMetric {
+        Arc::new(RwLock::new(Metric::Count(metric)))
+    }
+
     pub fn metric_type(&self) -> MetricType {
         match self {
             Metric::Gauge(_) => MetricType::Gauge,
