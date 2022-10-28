@@ -20,8 +20,10 @@ pub async fn main() {
     let app = Router::with_state(app_state.clone())
         .route("/metrics/gauge", post(create_gauge_metric))
         .route("/metrics/gauge/:name", put(add_gauge_metric_value))
+
         .route("/metrics/count", post(create_count_metric))
         .route("/metrics/count/:name", put(add_count_metric_value))
+
         .route("/metrics/query/:name", post(metric_query))
         .route("/metrics/primary-tag/:name", post(add_primary_tag))
     ;

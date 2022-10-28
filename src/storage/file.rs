@@ -213,10 +213,12 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     fn add_datapoint(&mut self, tags: Tags, datapoint: Datapoint<E>) -> Result<(), MetricError> {
         unsafe {
             let active_block = self.active_block_mut();
-            (*active_block).end_time = (*active_block).end_time.max((*active_block).start_time + datapoint.time_offset as Time);
+            let datapoint_time = (*active_block).start_time + datapoint.time_offset as Time;
 
             let sub_block = self.allocate_sub_block_for_insertion(active_block, tags)?;
             sub_block.add_datapoint(active_block, datapoint);
+            (*active_block).end_time = (*active_block).end_time.max(datapoint_time);
+
             self.requires_sync = true;
         }
 
@@ -430,12 +432,8 @@ impl<E: Copy> SubBlock<E> {
     }
 
     pub fn add_datapoint(&mut self, block_ptr: *const Block<E>, datapoint: Datapoint<E>) {
-        unsafe {
-            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<Block<E>>() + self.offset) as *mut Datapoint<E>;
-            *datapoints_ptr.add(self.count as usize) = datapoint;
-        }
-
         self.count += 1;
+        *self.datapoints_mut(block_ptr).last_mut().unwrap() = datapoint;
     }
 
     pub fn datapoints(&self, block_ptr: *const Block<E>) -> &[Datapoint<E>] {

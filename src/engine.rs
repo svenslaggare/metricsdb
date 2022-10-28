@@ -157,7 +157,7 @@ impl MetricsEngine {
     }
 
     pub fn add_primary_tag(&self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
-        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+        match self.metrics.write().unwrap().get_metric_mut(metric)? {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,
             Metric::Count(metric) => metric.add_primary_tag(tag)?,
         }
@@ -166,7 +166,7 @@ impl MetricsEngine {
     }
 
     pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+        match self.metrics.write().unwrap().get_metric_mut(metric)? {
             Metric::Gauge(metric) => {
                 let mut num_success = 0;
 
@@ -182,7 +182,7 @@ impl MetricsEngine {
     }
 
     pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.write().unwrap().get_mut(metric).ok_or_else(|| MetricsEngineError::MetricNotFound)? {
+        match self.metrics.write().unwrap().get_metric_mut(metric)? {
             Metric::Count(metric) => {
                 let mut num_success = 0;
 
@@ -219,6 +219,21 @@ impl MetricsEngine {
                 Metric::Count(metric) => metric.scheduled()
             }
         }
+    }
+}
+
+trait MetricsHashMapExt {
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<&Metric>;
+    fn get_metric_mut(&mut self, name: &str) -> MetricsEngineResult<&mut Metric>;
+}
+
+impl MetricsHashMapExt for FnvHashMap<String, Metric> {
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<&Metric> {
+        self.get(name).ok_or_else(|| MetricsEngineError::MetricNotFound)
+    }
+
+    fn get_metric_mut(&mut self, name: &str) -> MetricsEngineResult<&mut Metric> {
+        self.get_mut(name).ok_or_else(|| MetricsEngineError::MetricNotFound)
     }
 }
 
