@@ -219,8 +219,8 @@ impl MetricsEngine {
     }
 
     pub fn scheduled(&self) {
-        let mut metrics_guard = self.metrics.write().unwrap();
-        for metric in metrics_guard.values_mut() {
+        let metrics_guard = self.metrics.read().unwrap();
+        for metric in metrics_guard.values() {
             match metric.write().unwrap().deref_mut() {
                 Metric::Gauge(metric) => metric.scheduled(),
                 Metric::Count(metric) => metric.scheduled()
