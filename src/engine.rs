@@ -284,8 +284,7 @@ impl MetricsEngine {
 
     pub fn scheduled(&self) {
         for entry in self.metrics.iter() {
-            let metric = entry.value();
-            match metric.write().unwrap().deref_mut() {
+            match entry.value().write().unwrap().deref_mut() {
                 Metric::Gauge(metric) => metric.scheduled(),
                 Metric::Count(metric) => metric.scheduled()
             }
