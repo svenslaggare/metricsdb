@@ -44,10 +44,10 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
     pub fn add(&mut self, time: f64, count: u16, mut tags: Vec<String>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
-        let time = (time * TIME_SCALE as f64).round() as Time;
-        let value = count as u32;
-
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
+            let time = (time * TIME_SCALE as f64).round() as Time;
+            let value = count as u32;
+
             let mut datapoint = Datapoint {
                 time_offset: 0,
                 value

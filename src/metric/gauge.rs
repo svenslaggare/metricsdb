@@ -44,10 +44,10 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
     pub fn add(&mut self, time: f64, value: f64, mut tags: Vec<String>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
-        let time = (time * TIME_SCALE as f64).round() as Time;
-        let value = value as f32;
-
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, f32>| {
+            let time = (time * TIME_SCALE as f64).round() as Time;
+            let value = value as f32;
+
             let mut datapoint = Datapoint {
                 time_offset: 0,
                 value
