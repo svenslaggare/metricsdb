@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{PrimaryTagsStorage};
+use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::{PrimaryTag, Query, TimeRange};
@@ -47,40 +47,44 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         let time = (time * TIME_SCALE as f64).round() as Time;
         let value = count as u32;
 
-        let mut datapoint = Datapoint {
-            time_offset: 0,
-            value
-        };
+        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
+            let mut datapoint = Datapoint {
+                time_offset: 0,
+                value
+            };
 
-        if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
-            if time < block_end_time {
-                return Err(MetricError::InvalidTimeOrder);
-            }
-
-            let time_offset = time - block_start_time;
-            if time_offset < primary_tag.storage.block_duration() {
-                assert!(time_offset < u32::MAX as u64);
-                datapoint.time_offset = time_offset as u32;
-
-                let datapoint_duration = primary_tag.storage.datapoint_duration();
-                if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
-                    if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
-                        last_datapoint.value += value;
-                        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
-                        return Ok(());
-                    }
+            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
+                if time < block_end_time {
+                    return Err(MetricError::InvalidTimeOrder);
                 }
 
-                primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
+                let time_offset = time - block_start_time;
+                if time_offset < primary_tag.storage.block_duration() {
+                    assert!(time_offset < u32::MAX as u64);
+                    datapoint.time_offset = time_offset as u32;
+
+                    let datapoint_duration = primary_tag.storage.datapoint_duration();
+                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
+                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
+                            last_datapoint.value += value;
+                            return Ok(());
+                        }
+                    }
+
+                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
+                } else {
+                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+                }
             } else {
                 primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
             }
-        } else {
-            primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-        }
 
+            Ok(())
+        };
+
+        let result = add(&mut primary_tag);
         self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
-        Ok(())
+        result
     }
 
     pub fn sum(&self, query: Query) -> Option<f64> {
