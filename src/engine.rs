@@ -181,8 +181,9 @@ impl MetricsEngine {
                 let mut num_success = 0;
 
                 for value in values {
-                    metric.add(value.time, value.value, value.tags)?;
-                    num_success += 1;
+                    if let Ok(_) = metric.add(value.time, value.value, value.tags) {
+                        num_success += 1;
+                    }
                 }
 
                 Ok(num_success)
@@ -197,8 +198,9 @@ impl MetricsEngine {
                 let mut num_success = 0;
 
                 for value in values {
-                    metric.add(value.time, value.count, value.tags)?;
-                    num_success += 1;
+                    if let Ok(_) = metric.add(value.time, value.count, value.tags) {
+                        num_success += 1;
+                    }
                 }
 
                 Ok(num_success)
