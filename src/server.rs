@@ -13,7 +13,7 @@ use axum::http::StatusCode;
 use axum::routing::{post, put};
 use tokio::time;
 
-use crate::{AddCountValue, MetricsEngine, PrimaryTag, Query, TimeRange};
+use crate::{AddCountValue, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange};
 use crate::engine::{AddGaugeValue, MetricsEngineError};
 
 pub async fn main() {
@@ -146,18 +146,37 @@ enum MetricOperation {
 }
 
 #[derive(Deserialize)]
+enum TagsFilterType {
+    And,
+    Or
+}
+
+#[derive(Deserialize)]
 struct MetricQuery {
+    start: f64,
+    end: f64,
     operation: MetricOperation,
     percentile: Option<i32>,
     duration: Option<f64>,
-    start: f64,
-    end: f64
+    tags: Option<Vec<String>>,
+    tags_filter_type: Option<TagsFilterType>
 }
 
 async fn metric_query(State(state): State<Arc<AppState>>,
                       Path(name): Path<String>,
                       Json(input_query): Json<MetricQuery>) -> ServerResult<Response> {
-    let query = Query::new(TimeRange::new(input_query.start, input_query.end));
+    let mut query = Query::new(TimeRange::new(input_query.start, input_query.end));
+    if let Some(tags) = input_query.tags {
+        match input_query.tags_filter_type.unwrap_or(TagsFilterType::And) {
+            TagsFilterType::And => {
+                query = query.with_tags_filter(TagsFilter::And(tags));
+            }
+            TagsFilterType::Or => {
+                query = query.with_tags_filter(TagsFilter::Or(tags));
+            }
+        }
+    }
+
     let value = match input_query.operation {
         MetricOperation::Average => {
             if let Some(duration) = input_query.duration {
