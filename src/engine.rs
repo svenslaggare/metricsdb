@@ -1,9 +1,11 @@
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
-use fnv::FnvHashMap;
+use dashmap::DashMap;
+use fnv::{FnvBuildHasher};
+
 use serde::{Serialize, Deserialize};
 
 use crate::{DefaultCountMetric, DefaultGaugeMetric, PrimaryTag, Query};
@@ -65,7 +67,8 @@ impl AddCountValue {
 
 pub struct MetricsEngine {
     base_path: PathBuf,
-    metrics: RwLock<FnvHashMap<String, ArcMetric>>
+    metrics: DashMap<String, ArcMetric, FnvBuildHasher>,
+    create_lock: Mutex<()>
 }
 
 impl MetricsEngine {
@@ -77,7 +80,8 @@ impl MetricsEngine {
         Ok(
             MetricsEngine {
                 base_path: base_path.to_owned(),
-                metrics: RwLock::new(FnvHashMap::default())
+                metrics: DashMap::default(),
+                create_lock: Mutex::new(())
             }
         )
     }
@@ -89,7 +93,7 @@ impl MetricsEngine {
             Ok(metrics)
         };
 
-        let mut metrics = FnvHashMap::default();
+        let metrics = DashMap::default();
         for (metric_name, metric_type) in load().map_err(|err| MetricsEngineError::FailedToLoadMetricDefinitions(err))? {
             let metric = match metric_type {
                 MetricType::Gauge => Metric::Gauge(DefaultGaugeMetric::from_existing(&base_path.join(&metric_name))?),
@@ -102,7 +106,8 @@ impl MetricsEngine {
         Ok(
             MetricsEngine {
                 base_path: base_path.to_owned(),
-                metrics: RwLock::new(metrics)
+                metrics,
+                create_lock: Mutex::new(())
             }
         )
     }
@@ -116,34 +121,30 @@ impl MetricsEngine {
     }
 
     pub fn add_gauge_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        {
-            let mut metrics_guard = self.metrics.write().unwrap();
-            if metrics_guard.contains_key(name) {
-                return Err(MetricsEngineError::MetricAlreadyExists);
-            }
-
-            metrics_guard.insert(
-                name.to_string(),
-                Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)
-            );
+        let _guard = self.create_lock.lock().unwrap();
+        if self.metrics.contains_key(name) {
+            return Err(MetricsEngineError::MetricAlreadyExists);
         }
+
+        self.metrics.insert(
+            name.to_string(),
+            Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)
+        );
 
         self.save_defined_metrics()?;
         Ok(())
     }
 
     pub fn add_count_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        {
-            let mut metrics_guard = self.metrics.write().unwrap();
-            if metrics_guard.contains_key(name) {
-                return Err(MetricsEngineError::MetricAlreadyExists);
-            }
-
-            metrics_guard.insert(
-                name.to_string(),
-                Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)
-            );
+        let _guard = self.create_lock.lock().unwrap();
+        if self.metrics.contains_key(name) {
+            return Err(MetricsEngineError::MetricAlreadyExists);
         }
+
+        self.metrics.insert(
+            name.to_string(),
+            Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)
+        );
 
         self.save_defined_metrics()?;
         Ok(())
@@ -151,10 +152,10 @@ impl MetricsEngine {
 
     fn save_defined_metrics(&self) -> MetricsEngineResult<()> {
         let save = || -> std::io::Result<()> {
-            let content = serde_json::to_string(&
-                self.metrics.read().unwrap()
+            let content = serde_json::to_string(
+                &self.metrics
                     .iter()
-                    .map(|(name, metric)| (name, metric.read().unwrap().metric_type()))
+                    .map(|item| (item.key().to_owned(), item.value().read().unwrap().metric_type()))
                     .collect::<Vec<_>>()
             )?;
             std::fs::write(&self.base_path.join("metrics.json"), &content)?;
@@ -166,7 +167,7 @@ impl MetricsEngine {
     }
 
     pub fn add_primary_tag(&self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
-        match self.metrics.read().unwrap().get_metric(metric)?.write().unwrap().deref_mut() {
+        match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,
             Metric::Count(metric) => metric.add_primary_tag(tag)?,
         }
@@ -175,7 +176,7 @@ impl MetricsEngine {
     }
 
     pub fn gauge(&self, metric: &str, values: impl Iterator<Item=AddGaugeValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.write().unwrap().deref_mut() {
+        match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => {
                 let mut num_success = 0;
 
@@ -191,7 +192,7 @@ impl MetricsEngine {
     }
 
     pub fn count(&self, metric: &str, values: impl Iterator<Item=AddCountValue>) -> MetricsEngineResult<usize> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.write().unwrap().deref_mut() {
+        match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Count(metric) => {
                 let mut num_success = 0;
 
@@ -207,64 +208,64 @@ impl MetricsEngine {
     }
 
     pub fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average(query)),
             Metric::Count(metric) => Ok(metric.average(query))
         }
     }
 
     pub fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum(query)),
             Metric::Count(metric) => Ok(metric.sum(query))
         }
     }
 
     pub fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max(query)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
     pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<Option<f64>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile(query, percentile)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
     pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average_in_window(query, duration)),
             Metric::Count(metric) => Ok(metric.average_in_window(query, duration))
         }
     }
 
     pub fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum_in_window(query, duration)),
             Metric::Count(metric) => Ok(metric.sum_in_window(query, duration))
         }
     }
 
     pub fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max_in_window(query, duration)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
     pub fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<Vec<(f64, f64)>> {
-        match self.metrics.read().unwrap().get_metric_cloned(metric)?.read().unwrap().deref() {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
     pub fn scheduled(&self) {
-        let metrics_guard = self.metrics.read().unwrap();
-        for metric in metrics_guard.values() {
+        for entry in self.metrics.iter() {
+            let metric = entry.value();
             match metric.write().unwrap().deref_mut() {
                 Metric::Gauge(metric) => metric.scheduled(),
                 Metric::Count(metric) => metric.scheduled()
@@ -274,17 +275,12 @@ impl MetricsEngine {
 }
 
 trait MetricsHashMapExt {
-    fn get_metric(&self, name: &str) -> MetricsEngineResult<&ArcMetric>;
-    fn get_metric_cloned(&self, name: &str) -> MetricsEngineResult<ArcMetric>;
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<ArcMetric>;
 }
 
-impl MetricsHashMapExt for FnvHashMap<String, ArcMetric> {
-    fn get_metric(&self, name: &str) -> MetricsEngineResult<&ArcMetric> {
-        self.get(name).ok_or_else(|| MetricsEngineError::MetricNotFound)
-    }
-
-    fn get_metric_cloned(&self, name: &str) -> MetricsEngineResult<ArcMetric> {
-        self.get_metric(name).cloned()
+impl MetricsHashMapExt for DashMap<String, ArcMetric, FnvBuildHasher> {
+    fn get_metric(&self, name: &str) -> MetricsEngineResult<ArcMetric> {
+        self.get(name).ok_or_else(|| MetricsEngineError::MetricNotFound).map(|item| item.value().clone())
     }
 }
 
