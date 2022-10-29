@@ -22,6 +22,7 @@ pub enum MetricsEngineError {
     MetricNotFound,
     WrongMetricType,
     UndefinedOperation,
+    InvalidQueryInput,
     Metric(MetricError)
 }
 
@@ -179,10 +180,18 @@ impl MetricsEngine {
         match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => {
                 let mut num_success = 0;
+                let mut error = None;
 
                 for value in values {
-                    if let Ok(_) = metric.add(value.time, value.value, value.tags) {
-                        num_success += 1;
+                    match metric.add(value.time, value.value, value.tags) {
+                        Ok(_) => { num_success += 1; }
+                        Err(err) => { error = Some(err); }
+                    }
+                }
+
+                if num_success == 0 {
+                    if let Some(err) = error {
+                        return Err(err.into());
                     }
                 }
 
@@ -196,10 +205,18 @@ impl MetricsEngine {
         match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Count(metric) => {
                 let mut num_success = 0;
+                let mut error = None;
 
                 for value in values {
-                    if let Ok(_) = metric.add(value.time, value.count, value.tags) {
-                        num_success += 1;
+                    match metric.add(value.time, value.count, value.tags) {
+                        Ok(_) => { num_success += 1; }
+                        Err(err) => { error = Some(err); }
+                    }
+                }
+
+                if num_success == 0 {
+                    if let Some(err) = error {
+                        return Err(err.into());
                     }
                 }
 

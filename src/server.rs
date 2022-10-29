@@ -7,13 +7,14 @@ use serde_json::json;
 use serde::Deserialize;
 
 use axum::extract::{Path, State};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
+use axum::http::StatusCode;
 use axum::routing::{post, put};
 use tokio::time;
 
 use crate::{AddCountValue, MetricsEngine, PrimaryTag, Query, TimeRange};
-use crate::engine::AddGaugeValue;
+use crate::engine::{AddGaugeValue, MetricsEngineError};
 
 pub async fn main() {
     let app_state = Arc::new(AppState::new());
@@ -44,6 +45,33 @@ pub async fn main() {
         .unwrap();
 }
 
+pub type ServerResult<T> = Result<T, MetricsEngineError>;
+
+impl IntoResponse for MetricsEngineError {
+    fn into_response(self) -> Response {
+        let (error_code, error_message) = match self {
+            MetricsEngineError::FailedToCreateBaseDir(err) => (StatusCode::BAD_REQUEST, format!("Failed to create base dir due to: {}", err)),
+            MetricsEngineError::FailedToLoadMetricDefinitions(err) => (StatusCode::BAD_REQUEST, format!("Failed to load metrics definitions due to: {}", err)),
+            MetricsEngineError::FailedToSaveMetricDefinitions(err) => (StatusCode::BAD_REQUEST, format!("Failed to save metrics definitions due to: {}", err)),
+            MetricsEngineError::MetricAlreadyExists => (StatusCode::BAD_REQUEST, format!("Metrics already exist.")),
+            MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metrics not found.")),
+            MetricsEngineError::WrongMetricType => (StatusCode::BAD_REQUEST, format!("Wrong metric type.")),
+            MetricsEngineError::UndefinedOperation => (StatusCode::BAD_REQUEST, format!("Operation not defined for current metric type.")),
+            MetricsEngineError::InvalidQueryInput => (StatusCode::BAD_REQUEST, format!("Invalid query input.")),
+            MetricsEngineError::Metric(err) => (StatusCode::BAD_REQUEST, format!("Metric error: {:?}", err))
+        };
+
+        let mut response = Json(
+            json!({
+                "message": error_message
+            })
+        ).into_response();
+        *response.status_mut() = error_code;
+
+        response
+    }
+}
+
 struct AppState {
     metrics_engine: MetricsEngine
 }
@@ -61,24 +89,14 @@ struct CreateMetric {
     name: String
 }
 
-async fn create_gauge_metric(State(state): State<Arc<AppState>>,
-                             Json(input): Json<CreateMetric>) -> impl IntoResponse {
-    let success = state.metrics_engine.add_gauge_metric(&input.name).is_ok();
-    Json(
-        json!({
-            "success": success
-        })
-    )
+async fn create_gauge_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
+    state.metrics_engine.add_gauge_metric(&input.name)?;
+    Ok(Json(json!({})).into_response())
 }
 
-async fn create_count_metric(State(state): State<Arc<AppState>>,
-                             Json(input): Json<CreateMetric>) -> impl IntoResponse {
-    let success = state.metrics_engine.add_count_metric(&input.name).is_ok();
-    Json(
-        json!({
-            "success": success
-        })
-    )
+async fn create_count_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
+    state.metrics_engine.add_count_metric(&input.name)?;
+    Ok(Json(json!({})).into_response())
 }
 
 #[derive(Deserialize)]
@@ -88,34 +106,34 @@ struct AddPrimaryTag {
 
 async fn add_primary_tag(State(state): State<Arc<AppState>>,
                          Path(name): Path<String>,
-                         Json(primary_tag): Json<AddPrimaryTag>) -> impl IntoResponse {
-    let success = state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag)).is_ok();
-    Json(
-        json!({
-            "success": success
-        })
-    )
+                         Json(primary_tag): Json<AddPrimaryTag>) -> ServerResult<Response> {
+    state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag))?;
+    Ok(Json(json!({})).into_response())
 }
 
 async fn add_gauge_metric_value(State(state): State<Arc<AppState>>,
                                 Path(name): Path<String>,
-                                Json(metric_values): Json<Vec<AddGaugeValue>>) -> impl IntoResponse {
-    let success = state.metrics_engine.gauge(&name, metric_values.into_iter()).is_ok();
-    Json(
-        json!({
-            "success": success
-        })
+                                Json(metric_values): Json<Vec<AddGaugeValue>>) -> ServerResult<Response> {
+    let num_inserted = state.metrics_engine.gauge(&name, metric_values.into_iter())?;
+    Ok(
+        Json(
+            json!({
+                "num_inserted": num_inserted
+            })
+        ).into_response()
     )
 }
 
 async fn add_count_metric_value(State(state): State<Arc<AppState>>,
                                 Path(name): Path<String>,
-                                Json(metric_values): Json<Vec<AddCountValue>>) -> impl IntoResponse {
-    let success = state.metrics_engine.count(&name, metric_values.into_iter()).is_ok();
-    Json(
-        json!({
-            "success": success
-        })
+                                Json(metric_values): Json<Vec<AddCountValue>>) -> ServerResult<Response> {
+    let num_inserted = state.metrics_engine.count(&name, metric_values.into_iter())?;
+    Ok(
+        Json(
+            json!({
+                "num_inserted": num_inserted
+            })
+        ).into_response()
     )
 }
 
@@ -138,7 +156,7 @@ struct MetricQuery {
 
 async fn metric_query(State(state): State<Arc<AppState>>,
                       Path(name): Path<String>,
-                      Json(input_query): Json<MetricQuery>) -> impl IntoResponse {
+                      Json(input_query): Json<MetricQuery>) -> ServerResult<Response> {
     let query = Query::new(TimeRange::new(input_query.start, input_query.end));
     let value = match input_query.operation {
         MetricOperation::Average => {
@@ -170,29 +188,16 @@ async fn metric_query(State(state): State<Arc<AppState>>,
                     state.metrics_engine.percentile(&name, query, percentile).map(|x| json!(x))
                 }
             } else {
-                return Json(
-                    json!({
-                        "success": false
-                    })
-                );
+                return Err(MetricsEngineError::InvalidQueryInput);
             }
         }
-    };
+    }?;
 
-    match value {
-        Ok(value) => {
-            Json(
-                json!({
-                    "value": value
-                })
-            )
-        }
-        Err(_) => {
-            Json(
-                json!({
-                    "success": false
-                })
-            )
-        }
-    }
+    Ok(
+        Json(
+            json!({
+                "value": value
+            })
+        ).into_response()
+    )
 }
