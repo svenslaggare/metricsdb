@@ -289,7 +289,7 @@ struct Block<E: Copy> {
     start_time: Time,
     end_time: Time,
     num_sub_blocks: usize,
-    next_sub_block_offset: usize,
+    next_sub_block_offset: u32,
     sub_blocks: [SubBlock<E>; NUM_SUB_BLOCKS]
 }
 
@@ -327,7 +327,7 @@ impl<E: Copy> Block<E> {
             sub_block.offset = next_sub_block_offset;
             sub_block.datapoints_mut(block_ptr).clone_from_slice(&datapoints);
             num_sub_blocks += 1;
-            next_sub_block_offset += sub_block.datapoints_size();
+            next_sub_block_offset += sub_block.datapoints_size() as u32;
 
             self.sub_blocks[sub_block_index] = sub_block;
             new_size += sub_block.datapoints_size();
@@ -376,7 +376,7 @@ impl<E: Copy> Block<E> {
                 sub_block.count = 0;
                 sub_block.tags = tags;
                 self.num_sub_blocks += 1;
-                self.next_sub_block_offset += sub_block.datapoints_size();
+                self.next_sub_block_offset += sub_block.datapoints_size() as u32;
                 return Ok((sub_block, true));
             }
         }
@@ -396,7 +396,7 @@ impl<E: Copy> Block<E> {
             let size = increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
             storage_file.try_grow_file(size).map_err(|err| MetricError::MemoryFileError(err))?;
 
-            self.next_sub_block_offset += increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
+            self.next_sub_block_offset += (increased_capacity as usize * std::mem::size_of::<Datapoint<E>>()) as u32;
             sub_block.capacity = new_capacity;
             Ok(Some(increased_capacity))
         } else {
@@ -407,7 +407,7 @@ impl<E: Copy> Block<E> {
 
 #[derive(Clone, Copy)]
 struct SubBlock<E: Copy> {
-    offset: usize,
+    offset: u32,
     capacity: u32,
     count: u32,
     tags: Tags,
@@ -438,14 +438,14 @@ impl<E: Copy> SubBlock<E> {
 
     pub fn datapoints(&self, block_ptr: *const Block<E>) -> &[Datapoint<E>] {
         unsafe {
-            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<Block<E>>() + self.offset) as *const Datapoint<E>;
+            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<Block<E>>() + self.offset as usize) as *const Datapoint<E>;
             std::slice::from_raw_parts(datapoints_ptr, self.count as usize)
         }
     }
 
     pub fn datapoints_mut(&self, block_ptr: *const Block<E>) -> &mut [Datapoint<E>] {
         unsafe {
-            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<Block<E>>() + self.offset) as *mut Datapoint<E>;
+            let datapoints_ptr = (block_ptr as *const u8).add(std::mem::size_of::<Block<E>>() + self.offset as usize) as *mut Datapoint<E>;
             std::slice::from_raw_parts_mut(datapoints_ptr, self.count as usize)
         }
     }
