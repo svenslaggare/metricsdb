@@ -5,8 +5,12 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use tempfile::tempdir;
 
-use crate::{AddGaugeValue, DefaultCountMetric, DefaultGaugeMetric, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange, TransformOperation};
-use crate::engine::AddCountValue;
+use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use crate::metric::count::DefaultCountMetric;
+use crate::metric::gauge::DefaultGaugeMetric;
+use crate::metric::operations::TransformOperation;
+use crate::model::{Query, TimeRange};
+use crate::tags::{PrimaryTag, TagsFilter};
 
 #[derive(Deserialize)]
 struct SampleData {

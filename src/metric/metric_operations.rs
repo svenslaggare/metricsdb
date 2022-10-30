@@ -47,7 +47,6 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
                             start_time,
                             end_time,
                             block_start_time,
-                            block_end_time,
                             datapoints.iter()
                         );
 
@@ -173,7 +172,6 @@ struct DatapointIterator<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> {
     start_time: Time,
     end_time: Time,
     block_start_time: Time,
-    block_end_time: Time,
     iterator: T,
     outside_time_range: bool,
     peeked: Option<Option<&'a Datapoint<E>>>
@@ -183,13 +181,11 @@ impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> DatapointIterator<'a, T, E
     pub fn new(start_time: Time,
                end_time: Time,
                block_start_time: Time,
-               block_end_time: Time,
                iterator: T) -> DatapointIterator<'a, T, E> {
         DatapointIterator {
             start_time,
             end_time,
             block_start_time,
-            block_end_time,
             iterator,
             outside_time_range: false,
             peeked: None

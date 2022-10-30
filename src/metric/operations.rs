@@ -1,8 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::metric::metric_operations::TimeRangeStatistics;
-use crate::model::MinMax;
-use crate::TimeRange;
+use crate::model::{MinMax, TimeRange};
 
 pub trait StreamingOperation<TInput, TOutput=TInput> {
     fn add(&mut self, value: TInput);

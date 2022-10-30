@@ -8,8 +8,10 @@ use fnv::{FnvBuildHasher};
 
 use serde::{Serialize, Deserialize};
 
-use crate::{DefaultCountMetric, DefaultGaugeMetric, PrimaryTag, Query};
-use crate::model::{MetricError};
+use crate::metric::count::DefaultCountMetric;
+use crate::metric::gauge::DefaultGaugeMetric;
+use crate::model::{MetricError, Query};
+use crate::tags::PrimaryTag;
 
 pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
 

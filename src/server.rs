@@ -6,15 +6,17 @@ use std::time::Duration;
 use serde_json::json;
 use serde::Deserialize;
 
+use tokio::time;
+
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 use axum::http::StatusCode;
 use axum::routing::{post, put};
-use tokio::time;
 
-use crate::{AddCountValue, MetricsEngine, PrimaryTag, Query, TagsFilter, TimeRange};
-use crate::engine::{AddGaugeValue, MetricsEngineError};
+use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine, MetricsEngineError};
+use crate::model::{Query, TimeRange};
+use crate::tags::{PrimaryTag, TagsFilter};
 
 pub async fn main() {
     let app_state = Arc::new(AppState::new());

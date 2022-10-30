@@ -3,9 +3,8 @@ use std::path::{Path, PathBuf};
 
 use fnv::FnvHashMap;
 
-use crate::model::{MetricError, MetricResult, TIME_SCALE};
+use crate::model::{MetricError, MetricResult, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
-use crate::Tags;
 use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;

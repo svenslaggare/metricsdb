@@ -4,11 +4,11 @@ use std::time::Duration;
 use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
-use crate::{PrimaryTag, Query, TimeRange};
 use crate::metric::metric_operations;
-use crate::model::{Datapoint, MetricError, MetricResult, Time, TIME_SCALE};
+use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE, TimeRange};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
+use crate::tags::PrimaryTag;
 
 pub type DefaultCountMetric = CountMetric<FileMetricStorage<u32>>;
 

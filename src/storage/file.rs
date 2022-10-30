@@ -3,9 +3,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::storage::memory_file::MemoryFile;
-use crate::model::{Datapoint, MetricError, MetricResult, Time};
+use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 use crate::storage::MetricStorage;
-use crate::Tags;
 
 const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
 const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
