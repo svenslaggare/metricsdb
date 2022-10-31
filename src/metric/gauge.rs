@@ -308,3 +308,9 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.primary_tags_storage.scheduled();
     }
 }
+
+impl<TStorage: MetricStorage<f32>> Drop for GaugeMetric<TStorage> {
+    fn drop(&mut self) {
+        println!("Dropped metric.");
+    }
+}

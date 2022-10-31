@@ -7,6 +7,7 @@ use serde_json::json;
 use serde::Deserialize;
 
 use tokio::time;
+use tokio::sync::{Notify};
 
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
@@ -39,12 +40,23 @@ pub async fn main() {
         }
     });
 
+    let shutdown_notify = Arc::new(Notify::new());
+
+    let shutdown_notify_clone = shutdown_notify.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        println!("Shutting down...");
+        shutdown_notify_clone.notify_one();
+    });
+
     let address = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 9090);
     println!("Listing on {}", address);
-    axum::Server::bind(&address)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    tokio::select! {
+        _ = axum::Server::bind(&address).serve(app.into_make_service()) => {}
+        _ = shutdown_notify.notified() => {
+            return;
+        }
+    }
 }
 
 pub type ServerResult<T> = Result<T, MetricsEngineError>;
@@ -52,9 +64,9 @@ pub type ServerResult<T> = Result<T, MetricsEngineError>;
 impl IntoResponse for MetricsEngineError {
     fn into_response(self) -> Response {
         let (error_code, error_message) = match self {
-            MetricsEngineError::FailedToCreateBaseDir(err) => (StatusCode::BAD_REQUEST, format!("Failed to create base dir due to: {}", err)),
-            MetricsEngineError::FailedToLoadMetricDefinitions(err) => (StatusCode::BAD_REQUEST, format!("Failed to load metrics definitions due to: {}", err)),
-            MetricsEngineError::FailedToSaveMetricDefinitions(err) => (StatusCode::BAD_REQUEST, format!("Failed to save metrics definitions due to: {}", err)),
+            MetricsEngineError::FailedToCreateBaseDir(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create base dir due to: {}", err)),
+            MetricsEngineError::FailedToLoadMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load metrics definitions due to: {}", err)),
+            MetricsEngineError::FailedToSaveMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save metrics definitions due to: {}", err)),
             MetricsEngineError::MetricAlreadyExists => (StatusCode::BAD_REQUEST, format!("Metrics already exist.")),
             MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metrics not found.")),
             MetricsEngineError::WrongMetricType => (StatusCode::BAD_REQUEST, format!("Wrong metric type.")),
