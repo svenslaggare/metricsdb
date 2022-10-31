@@ -265,15 +265,17 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                         false,
                         |datapoint_time, datapoint| {
                             let window_index = windowing.get_window_index(datapoint_time);
-                            windowing.get(window_index)
-                                .get_or_insert_with(|| {
-                                    if require_statistics {
-                                        create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
-                                    } else {
-                                        create_op(None)
-                                    }
-                                })
-                                .add(datapoint.value as f64);
+                            if window_index < windowing.len() {
+                                windowing.get(window_index)
+                                    .get_or_insert_with(|| {
+                                        if require_statistics {
+                                            create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
+                                        } else {
+                                            create_op(None)
+                                        }
+                                    })
+                                    .add(datapoint.value as f64);
+                            }
                         }
                     );
 

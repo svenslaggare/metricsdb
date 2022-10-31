@@ -168,9 +168,11 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                         false,
                         |datapoint_time, datapoint| {
                             let window_index = windowing.get_window_index(datapoint_time);
-                            windowing.get(window_index)
-                                .get_or_insert_with(|| { create_op((datapoint_time / TIME_SCALE) as f64, ((datapoint_time + duration) / TIME_SCALE) as f64) })
-                                .add(datapoint.value as u64);
+                            if window_index < windowing.len() {
+                                windowing.get(window_index)
+                                    .get_or_insert_with(|| { create_op((datapoint_time / TIME_SCALE) as f64, ((datapoint_time + duration) / TIME_SCALE) as f64) })
+                                    .add(datapoint.value as u64);
+                            }
                         }
                     );
 

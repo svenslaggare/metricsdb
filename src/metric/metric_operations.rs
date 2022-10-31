@@ -13,11 +13,14 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
     while lower <= upper {
         let middle = lower + (upper - lower) / 2;
         // println!("{}, {}, {}", lower, upper, middle);
-        let (_, middle_time) = storage.block_time_range(middle).unwrap();
-        if time > middle_time {
-            lower = middle + 1;
-        } else if time < middle_time {
-            upper = middle - 1;
+        if let Some((_, middle_time)) = storage.block_time_range(middle) {
+            if time > middle_time {
+                lower = middle + 1;
+            } else if time < middle_time {
+                upper = middle - 1;
+            } else {
+                break;
+            }
         } else {
             break;
         }
