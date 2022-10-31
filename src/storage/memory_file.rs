@@ -51,7 +51,7 @@ impl MemoryFile {
             libc::mmap(
                 std::ptr::null_mut(),
                 size,
-                if create {libc::PROT_READ | libc::PROT_WRITE} else {libc::PROT_READ},
+                libc::PROT_READ | libc::PROT_WRITE,
                 libc::MAP_SHARED,
                 file.as_raw_fd(),
                 0
