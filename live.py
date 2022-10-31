@@ -13,6 +13,7 @@ def main():
             "http://localhost:9090/metrics/query/cpu_usage",
             json={
                 "operation": "Average",
+                # "percentile": 50,
                 "duration": 10.0,
                 "start": time_now - 3600.0,
                 "end": time_now,
