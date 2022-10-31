@@ -32,7 +32,7 @@ pub async fn main() {
     ;
 
     tokio::spawn(async move {
-        let mut duration = time::interval(Duration::from_secs_f64(1.0));
+        let mut duration = time::interval(Duration::from_secs_f64(0.25));
         loop {
             duration.tick().await;
             app_state.metrics_engine.scheduled();
