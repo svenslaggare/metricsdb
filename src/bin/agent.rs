@@ -1,20 +1,29 @@
 use std::str::FromStr;
 use std::time::SystemTime;
+
 use fnv::FnvHashMap;
+
+use reqwest::StatusCode;
 use serde_json::json;
+
+struct AgentConfig {
+    base_url: String,
+    sample_rate: f64
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        AgentConfig {
+            base_url: "http://localhost:9090".to_string(),
+            sample_rate: 1.0
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
     let mut cpu_usage_collector = CpuUsageCollector::new();
-
-    // loop {
-    //     for (core_name, cpu_usage) in cpu_usage_collector.collect().unwrap() {
-    //         println!("{}: {}", core_name, 100.0 * cpu_usage);
-    //     }
-    //
-    //     println!();
-    //     std::thread::sleep(std::time::Duration::from_secs_f64(1.0));
-    // }
+    let config = AgentConfig::default();
 
     let client = reqwest::Client::new();
     loop {
@@ -30,19 +39,36 @@ async fn main() {
 
             println!("{}", cpu_usage_json);
 
-            let response = client.put("http://localhost:9090/metrics/gauge/cpu_usage")
-                .json(&cpu_usage_json)
-                .send()
-                .await
-                .unwrap();
-            let response_status = response.status();
-            let response_data = response.bytes().await.unwrap();
-            let response_data = std::str::from_utf8(response_data.as_ref()).unwrap();
-            println!("{}: {}", response_status, response_data);
+            match post_result(&config, &client, &cpu_usage_json).await {
+                Ok((status, content)) => {
+                    if !status.is_success() {
+                        println!("Failed to post result due to (status code: {}): {}", status, content)
+                    }
+                }
+                Err(err) => {
+                    println!("Failed to post result due to: {}", err);
+                }
+            }
         }
 
-        std::thread::sleep(std::time::Duration::from_secs_f64(1.0));
+        std::thread::sleep(std::time::Duration::from_secs_f64(1.0 / config.sample_rate));
     }
+}
+
+async fn post_result(config: &AgentConfig,
+                     client: &reqwest::Client,
+                     cpu_usage_json: &serde_json::Value) -> reqwest::Result<(StatusCode, String)> {
+    let response = client.put(format!("{}/metrics/gauge/cpu_usage", config.base_url))
+        .json(&cpu_usage_json)
+        .send()
+        .await?;
+
+    let response_status = response.status();
+
+    let response_data = response.bytes().await?;
+    let response_data = std::str::from_utf8(response_data.as_ref()).unwrap().to_owned();
+
+    Ok((response_status, response_data))
 }
 
 struct CpuUsageCollector {

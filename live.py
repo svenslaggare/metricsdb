@@ -21,10 +21,11 @@ def main():
             }
         )
         response.raise_for_status()
+        response_data = response.json()
 
-        ts, ys = zip(*response.json()["value"])
+        ts, ys = zip(*response_data["value"])
         ts = [datetime.datetime.fromtimestamp(t, tz=local_timezone) for t in ts]
-        plt.plot(ts, ys)
+        plt.plot(ts, ys, "-o")
         plt.ylim([0.0, 1.0])
         plt.show()
 

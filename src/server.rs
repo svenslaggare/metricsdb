@@ -40,9 +40,11 @@ pub async fn main() {
     });
 
     let address = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 9090);
-    println!("Listing on {}", address);
+    println!("Listening on {}", address);
     tokio::select! {
-        _ = axum::Server::bind(&address).serve(app.into_make_service()) => {}
+        result = axum::Server::bind(&address).serve(app.into_make_service()) => {
+            result.unwrap();
+        }
         _ = tokio::signal::ctrl_c() => {
             println!("Shutting down...");
             return;

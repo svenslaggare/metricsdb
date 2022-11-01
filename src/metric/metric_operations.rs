@@ -233,18 +233,17 @@ impl<'a, T: Iterator<Item=&'a Datapoint<E>>, E: Copy> Iterator for DatapointIter
 pub struct MetricWindowing<T> {
     windows: Vec<Option<T>>,
     duration: u64,
-    window_start: Time
+    start_time: Time
 }
 
 impl<T> MetricWindowing<T> {
     pub fn new(start_time: Time, end_time: Time, duration: u64) -> MetricWindowing<T> {
-        let window_start = start_time / duration;
-        let num_windows = (end_time / duration) - window_start;
+        let num_windows = (end_time - start_time) / duration;
 
         MetricWindowing {
             windows: (0..num_windows).map(|_| None).collect::<Vec<_>>(),
             duration,
-            window_start
+            start_time
         }
     }
 
@@ -257,11 +256,12 @@ impl<T> MetricWindowing<T> {
     }
 
     pub fn get_timestamp(&self, window_index: usize) -> f64 {
-        (((window_index as u64 + self.window_start) * self.duration) / TIME_SCALE) as f64
+        let timestamp = (window_index * self.duration as usize) as Time + self.start_time;
+        (timestamp / TIME_SCALE) as f64
     }
 
     pub fn get_window_index(&self, time: Time) -> usize {
-        ((time / self.duration) - self.window_start) as usize
+        ((time - self.start_time) / self.duration) as usize
     }
 
     pub fn create_windows<U, F: Fn() -> U>(&self, f: F) -> Vec<U> {
@@ -280,8 +280,8 @@ pub fn extract_operations_in_windows<
 >(windowing: MetricWindowing<T>, transform_output: F) -> Vec<(f64, TOutput)> {
     windowing.windows
         .iter()
-        .filter(|operation| operation.is_some())
         .enumerate()
+        .filter(|(_, operation)| operation.is_some())
         .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (windowing.get_timestamp(start), value)))
         .flatten()
         .collect()
