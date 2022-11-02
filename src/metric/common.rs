@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 
-use crate::model::{MetricError, MetricResult, Tags, TIME_SCALE};
+use crate::metric::tags::{PrimaryTag, SecondaryTagsIndex};
+use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
-use crate::tags::{PrimaryTag, SecondaryTagsIndex};
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
@@ -117,6 +117,34 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn return_tags(&mut self, primary_tag_key: PrimaryTag, primary_tag: PrimaryTagMetric<TStorage, E>) {
         self.tags.insert(primary_tag_key, primary_tag);
+    }
+
+    pub fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
+        let mut group_values = FnvHashSet::default();
+
+        for (primary_tag_key, primary_tag) in self.iter() {
+            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
+                for pattern in primary_tag.tags_index.all_patterns() {
+                    if tags_filter.accept(*pattern) {
+                        for index in 0..Tags::BITS {
+                            let index_pattern = 1 << index as Tags;
+                            if index_pattern & pattern != 0 {
+                                if let Some(key_value) = primary_tag.tags_index.tags_pattern_to_string(&index_pattern) {
+                                    let parts = key_value.split(":").collect::<Vec<_>>();
+                                    if parts.len() == 2 {
+                                        if parts[0] == key {
+                                            group_values.insert(parts[1].to_owned());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        group_values.into_iter().collect()
     }
 
     pub fn scheduled(&mut self) {

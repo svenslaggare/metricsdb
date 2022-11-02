@@ -1,7 +1,7 @@
-use crate::model::{Datapoint, MinMax, Time, TIME_SCALE};
+use crate::model::{Datapoint, MinMax, Tags, Time, TIME_SCALE};
 use crate::metric::operations::StreamingOperation;
+use crate::metric::tags::SecondaryTagsFilter;
 use crate::storage::MetricStorage;
-use crate::tags::SecondaryTagsFilter;
 
 pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
@@ -29,13 +29,13 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
     Some(lower)
 }
 
-pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
-                                                                                                          start_time: Time,
-                                                                                                          end_time: Time,
-                                                                                                          tags_filter: SecondaryTagsFilter,
-                                                                                                          start_block_index: usize,
-                                                                                                          strict_ordering: bool,
-                                                                                                          mut apply: F) {
+pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(&Tags, Time, &Datapoint<E>), E: Copy>(storage: &TStorage,
+                                                                                                                 start_time: Time,
+                                                                                                                 end_time: Time,
+                                                                                                                 tags_filter: SecondaryTagsFilter,
+                                                                                                                 start_block_index: usize,
+                                                                                                                 strict_ordering: bool,
+                                                                                                                 mut apply: F) {
     for block_index in start_block_index..storage.len() {
         let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
         if block_end_time >= start_time {
@@ -62,10 +62,10 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
                                 continue;
                             }
 
-                            sub_blocks_iterators.push(iterator);
+                            sub_blocks_iterators.push((tags, iterator));
                         } else {
                             for datapoint in &mut iterator {
-                                apply(block_start_time + datapoint.time_offset as Time, datapoint);
+                                apply(&tags, block_start_time + datapoint.time_offset as Time, datapoint);
                             }
                         }
                     }
@@ -74,12 +74,12 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(Time,
                 if strict_ordering {
                     let mut ordered_sub_blocks = (0..sub_blocks_iterators.len()).collect::<Vec<_>>();
                     while !ordered_sub_blocks.is_empty() {
-                        ordered_sub_blocks.sort_by_key(|&number| sub_blocks_iterators[number].peek().unwrap().time_offset);
+                        ordered_sub_blocks.sort_by_key(|&number| sub_blocks_iterators[number].1.peek().unwrap().time_offset);
                         let selected_sub_block = ordered_sub_blocks[0];
-                        let selected_iterator = &mut sub_blocks_iterators[selected_sub_block];
+                        let (selected_tags, selected_iterator) = &mut sub_blocks_iterators[selected_sub_block];
 
                         let datapoint = selected_iterator.next().unwrap();
-                        apply(block_start_time + datapoint.time_offset as Time, datapoint);
+                        apply(&selected_tags, block_start_time + datapoint.time_offset as Time, datapoint);
 
                         if selected_iterator.outside_time_range {
                             outside_time_range = true;
@@ -114,7 +114,7 @@ pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy +
         tags_filter,
         start_block_index,
         false,
-        |_, datapoint| {
+        |_, _, datapoint| {
             stats.handle(datapoint.value);
         }
     );

@@ -10,8 +10,9 @@ use serde::{Serialize, Deserialize};
 
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
+use crate::metric::OperationResult;
+use crate::metric::tags::PrimaryTag;
 use crate::model::{MetricError, Query};
-use crate::tags::PrimaryTag;
 
 pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
 
@@ -228,56 +229,56 @@ impl MetricsEngine {
         }
     }
 
-    pub fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
+    pub fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average(query)),
             Metric::Count(metric) => Ok(metric.average(query))
         }
     }
 
-    pub fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
+    pub fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum(query)),
             Metric::Count(metric) => Ok(metric.sum(query))
         }
     }
 
-    pub fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<Option<f64>> {
+    pub fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max(query)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
-    pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<Option<f64>> {
+    pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile(query, percentile)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
-    pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
+    pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average_in_window(query, duration)),
             Metric::Count(metric) => Ok(metric.average_in_window(query, duration))
         }
     }
 
-    pub fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
+    pub fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum_in_window(query, duration)),
             Metric::Count(metric) => Ok(metric.sum_in_window(query, duration))
         }
     }
 
-    pub fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<Vec<(f64, f64)>> {
+    pub fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max_in_window(query, duration)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
         }
     }
 
-    pub fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<Vec<(f64, f64)>> {
+    pub fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
             Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)

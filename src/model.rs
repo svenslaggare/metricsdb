@@ -1,6 +1,6 @@
 use crate::metric::operations::TransformOperation;
+use crate::metric::tags::TagsFilter;
 use crate::storage::memory_file::MemoryFileError;
-use crate::tags::{TagsFilter};
 
 pub type Time = u64;
 pub type Tags = u128;
@@ -41,7 +41,8 @@ pub struct Query {
     pub time_range: TimeRange,
     pub tags_filter: TagsFilter,
     pub input_transform: Option<TransformOperation>,
-    pub output_transform: Option<TransformOperation>
+    pub output_transform: Option<TransformOperation>,
+    pub group_by: Option<String>
 }
 
 impl Query {
@@ -50,7 +51,8 @@ impl Query {
             time_range,
             tags_filter: TagsFilter::None,
             input_transform: None,
-            output_transform: None
+            output_transform: None,
+            group_by: None
         }
     }
 
@@ -69,6 +71,12 @@ impl Query {
     pub fn with_output_transform(self, transform: TransformOperation) -> Query {
         let mut new = self;
         new.output_transform = Some(transform);
+        new
+    }
+
+    pub fn with_group_by(self, key: String) -> Query {
+        let mut new = self;
+        new.group_by = Some(key);
         new
     }
 }

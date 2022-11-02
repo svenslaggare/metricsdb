@@ -4,11 +4,11 @@ use std::time::Duration;
 use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
-use crate::metric::metric_operations;
+use crate::metric::{metric_operations, OperationResult};
+use crate::metric::tags::{PrimaryTag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE, TimeRange};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
-use crate::tags::PrimaryTag;
 
 pub type DefaultCountMetric = CountMetric<FileMetricStorage<u32>>;
 
@@ -87,59 +87,85 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         result
     }
 
-    pub fn sum(&self, query: Query) -> Option<f64> {
+    pub fn sum(&self, query: Query) -> OperationResult {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
-    pub fn average(&self, query: Query) -> Option<f64> {
+    pub fn average(&self, query: Query) -> OperationResult {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
     }
 
-    fn operation<T: StreamingOperation<u64, f64>, F: Fn() -> T>(&self, query: Query, create_op: F) -> Option<f64> {
+    fn operation<T: StreamingOperation<u64, f64>, F: Fn() -> T>(&self, query: Query, create_op: F) -> OperationResult {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
-        let mut streaming_operations = Vec::new();
-        for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
-            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
-                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                    let mut streaming_operation = create_op();
-                    metric_operations::visit_datapoints_in_time_range(
-                        &primary_tag.storage,
-                        start_time,
-                        end_time,
-                        tags_filter,
-                        start_block_index,
-                        false,
-                        |_, datapoint| {
-                            streaming_operation.add(datapoint.value as u64);
-                        }
-                    );
+        let apply = |tags_filter: &TagsFilter| {
+            let mut streaming_operations = Vec::new();
+            for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
+                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
+                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                        let mut streaming_operation = create_op();
+                        metric_operations::visit_datapoints_in_time_range(
+                            &primary_tag.storage,
+                            start_time,
+                            end_time,
+                            tags_filter,
+                            start_block_index,
+                            false,
+                            |_, _, datapoint| {
+                                streaming_operation.add(datapoint.value as u64);
+                            }
+                        );
 
-                    streaming_operations.push(streaming_operation);
+                        streaming_operations.push(streaming_operation);
+                    }
                 }
             }
-        }
 
-        if streaming_operations.is_empty() {
-            return None;
-        }
+            if streaming_operations.is_empty() {
+                return OperationResult::Value(None);
+            }
 
-        let streaming_operation = metric_operations::merge_operations(streaming_operations);
-        match query.output_transform {
-            Some(operation) => operation.apply(streaming_operation.value()? as f64),
-            None => streaming_operation.value().map(|x| x as f64)
+            let streaming_operation = metric_operations::merge_operations(streaming_operations);
+            let value = match streaming_operation.value() {
+                Some(value) => value,
+                None => { return OperationResult::Value(None); }
+            };
+
+            OperationResult::Value(
+                match query.output_transform {
+                    Some(operation) => operation.apply(value),
+                    None => Some(value)
+                }
+            )
+        };
+
+        match &query.group_by {
+            None => {
+                apply(&query.tags_filter)
+            }
+            Some(key) => {
+                let mut groups = Vec::new();
+                for group_value in self.primary_tags_storage.gather_group_values(&query, key) {
+                    let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
+                    groups.push((group_value, apply(&tags_filter).value()));
+                }
+
+                groups.sort_by(|a, b| a.0.cmp(&b.0));
+
+                OperationResult::GroupValues(groups)
+            }
         }
     }
 
-    pub fn sum_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
-    pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
     }
@@ -147,7 +173,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
     fn operation_in_window<T: StreamingOperation<u64, f64>, F: Fn(f64, f64) -> T>(&self,
                                                                                   query: Query,
                                                                                   duration: Duration,
-                                                                                  create_op: F) -> Vec<(f64, f64)> {
+                                                                                  create_op: F) -> OperationResult {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -166,7 +192,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                         tags_filter,
                         start_block_index,
                         false,
-                        |datapoint_time, datapoint| {
+                        |_, datapoint_time, datapoint| {
                             let window_index = windowing.get_window_index(datapoint_time);
                             if window_index < windowing.len() {
                                 windowing.get(window_index)
@@ -182,19 +208,21 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         }
 
         if primary_tags_windowing.is_empty() {
-            return Vec::new();
+            return OperationResult::TimeValues(Vec::new());
         }
 
-        metric_operations::extract_operations_in_windows(
-            metric_operations::merge_windowing(primary_tags_windowing),
-            |value| {
-                let value = value?;
+        OperationResult::TimeValues(
+            metric_operations::extract_operations_in_windows(
+                metric_operations::merge_windowing(primary_tags_windowing),
+                |value| {
+                    let value = value?;
 
-                match query.output_transform {
-                    Some(operation) => operation.apply(value),
-                    None => Some(value)
+                    match query.output_transform {
+                        Some(operation) => operation.apply(value),
+                        None => Some(value)
+                    }
                 }
-            }
+            )
         )
     }
 

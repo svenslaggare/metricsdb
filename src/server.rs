@@ -15,8 +15,8 @@ use axum::http::StatusCode;
 use axum::routing::{post, put};
 
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine, MetricsEngineError};
+use crate::metric::tags::{PrimaryTag, TagsFilter};
 use crate::model::{Query, TimeRange};
-use crate::tags::{PrimaryTag, TagsFilter};
 
 pub async fn main() {
     let app_state = Arc::new(AppState::new());
@@ -187,37 +187,39 @@ async fn metric_query(State(state): State<Arc<AppState>>,
     let value = match input_query.operation {
         MetricOperation::Average => {
             if let Some(duration) = input_query.duration {
-                state.metrics_engine.average_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+                state.metrics_engine.average_in_window(&name, query, Duration::from_secs_f64(duration))?
             } else {
-                state.metrics_engine.average(&name, query).map(|x| json!(x))
+                state.metrics_engine.average(&name, query)?
             }
         },
         MetricOperation::Sum => {
             if let Some(duration) = input_query.duration {
-                state.metrics_engine.sum_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+                state.metrics_engine.sum_in_window(&name, query, Duration::from_secs_f64(duration))?
             } else {
-                state.metrics_engine.sum(&name, query).map(|x| json!(x))
+                state.metrics_engine.sum(&name, query)?
             }
         },
         MetricOperation::Max => {
             if let Some(duration) = input_query.duration {
-                state.metrics_engine.max_in_window(&name, query, Duration::from_secs_f64(duration)).map(|x| json!(x))
+                state.metrics_engine.max_in_window(&name, query, Duration::from_secs_f64(duration))?
             } else {
-                state.metrics_engine.max(&name, query).map(|x| json!(x))
+                state.metrics_engine.max(&name, query)?
             }
         },
         MetricOperation::Percentile => {
             if let Some(percentile) = input_query.percentile {
                 if let Some(duration) = input_query.duration {
-                    state.metrics_engine.percentile_in_window(&name, query, Duration::from_secs_f64(duration), percentile).map(|x| json!(x))
+                    state.metrics_engine.percentile_in_window(&name, query, Duration::from_secs_f64(duration), percentile)?
                 } else {
-                    state.metrics_engine.percentile(&name, query, percentile).map(|x| json!(x))
+                    state.metrics_engine.percentile(&name, query, percentile)?
                 }
             } else {
                 return Err(MetricsEngineError::InvalidQueryInput);
             }
         }
-    }?;
+    };
+
+    let value = value.as_json();
 
     Ok(
         Json(

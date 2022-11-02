@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::path::{Path, PathBuf};
+use fnv::FnvHashSet;
 
 use serde::{Serialize, Deserialize};
 
@@ -15,7 +16,8 @@ pub enum PrimaryTag {
 pub enum TagsFilter {
     None,
     And(Vec<String>),
-    Or(Vec<String>)
+    Or(Vec<String>),
+    OrAnd(Vec<String>, Vec<String>)
 }
 
 impl TagsFilter {
@@ -49,8 +51,52 @@ impl TagsFilter {
                             Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?))
                         }
                     }
-                    PrimaryTag::Default => Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
+                    PrimaryTag::Default => {
+                        Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
+                    }
                 }
+            }
+            TagsFilter::OrAnd(left, right) => {
+                match primary_tag {
+                    PrimaryTag::Named(primary_tag) => {
+                        if left.contains(primary_tag) {
+                            Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(right.iter())?))
+                        } else if right.contains(primary_tag) {
+                            Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(left.iter())?))
+                        } else {
+                            Some(
+                                SecondaryTagsFilter::OrAnd(
+                                    tags_index.tags_pattern(remove_tag(left, primary_tag))?,
+                                    tags_index.tags_pattern(remove_tag(right, primary_tag))?
+                                )
+                            )
+                        }
+                    }
+                    PrimaryTag::Default => {
+                        Some(
+                            SecondaryTagsFilter::OrAnd(
+                                tags_index.tags_pattern(left.iter())?,
+                                tags_index.tags_pattern(right.iter())?
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn add_and_clause(self, mut tags: Vec<String>) -> TagsFilter {
+        match self {
+            TagsFilter::None => TagsFilter::And(tags),
+            TagsFilter::And(mut current) => {
+                current.append(&mut tags);
+                TagsFilter::Or(current)
+            }
+            TagsFilter::Or(current) => {
+                TagsFilter::OrAnd(current, tags)
+            }
+            TagsFilter::OrAnd(_, _) => {
+                unimplemented!("Not supported.");
             }
         }
     }
@@ -59,14 +105,19 @@ impl TagsFilter {
 #[derive(Serialize, Deserialize)]
 pub struct SecondaryTagsIndex {
     base_path: PathBuf,
-    mapping: HashMap<String, Tags>
+    mapping: HashMap<String, Tags>,
+    all_patterns: FnvHashSet<Tags>,
+    #[serde(skip)]
+    tags_pattern_to_string: HashMap<Tags, String>
 }
 
 impl SecondaryTagsIndex {
     pub fn new(base_path: &Path) -> SecondaryTagsIndex {
         SecondaryTagsIndex {
             base_path: base_path.to_owned(),
-            mapping: HashMap::new()
+            mapping: HashMap::new(),
+            all_patterns: FnvHashSet::default(),
+            tags_pattern_to_string: HashMap::new()
         }
     }
 
@@ -80,15 +131,21 @@ impl SecondaryTagsIndex {
             self.save().map_err(|err| MetricError::FailedToSaveSecondaryTag(err))?;
         }
 
-        self.tags_pattern(tags.iter()).ok_or_else(|| MetricError::ExceededSecondaryTags)
+        let pattern = self.tags_pattern(tags.iter()).ok_or_else(|| MetricError::ExceededSecondaryTags)?;
+        self.all_patterns.insert(pattern);
+        Ok(pattern)
     }
 
     pub fn try_add(&mut self, tag: &str) -> Option<(Tags, bool)> {
         if let Some(pattern) = self.mapping.get(tag) {
             return Some((*pattern, false));
         } else if self.mapping.len() < Tags::BITS as usize {
-            let pattern = 1 << self.mapping.len();
+            let pattern = 1 << self.mapping.len() as Tags;
             let inserted = self.mapping.insert(tag.to_owned(), pattern).is_none();
+            if inserted {
+                self.tags_pattern_to_string.insert(pattern, tag.to_owned());
+            }
+
             Some((pattern, inserted))
         } else {
             None
@@ -104,6 +161,14 @@ impl SecondaryTagsIndex {
         Some(pattern)
     }
 
+    pub fn tags_pattern_to_string(&self, tags: &Tags) -> Option<&String> {
+        self.tags_pattern_to_string.get(tags)
+    }
+
+    pub fn all_patterns(&self) -> &FnvHashSet<Tags> {
+        &self.all_patterns
+    }
+
     pub fn save(&self) -> std::io::Result<()> {
         let content = serde_json::to_string(&self)?;
         std::fs::write(&self.base_path.join("tags.json"), &content)?;
@@ -112,7 +177,12 @@ impl SecondaryTagsIndex {
 
     pub fn load(path: &Path) -> std::io::Result<SecondaryTagsIndex> {
         let content = std::fs::read_to_string(path)?;
-        let tags = serde_json::from_str(&content)?;
+        let mut tags: SecondaryTagsIndex = serde_json::from_str(&content)?;
+
+        for (tag, tag_pattern) in tags.mapping.iter() {
+            tags.tags_pattern_to_string.insert(*tag_pattern, tag.to_owned());
+        }
+
         Ok(tags)
     }
 }
@@ -121,7 +191,8 @@ impl SecondaryTagsIndex {
 pub enum SecondaryTagsFilter {
     None,
     And(Tags),
-    Or(Tags)
+    Or(Tags),
+    OrAnd(Tags, Tags)
 }
 
 impl SecondaryTagsFilter {
@@ -129,7 +200,8 @@ impl SecondaryTagsFilter {
         match self {
             SecondaryTagsFilter::None => true,
             SecondaryTagsFilter::And(pattern) => (tags & pattern) == *pattern,
-            SecondaryTagsFilter::Or(pattern) => (tags & pattern) != 0
+            SecondaryTagsFilter::Or(pattern) => (tags & pattern) != 0,
+            SecondaryTagsFilter::OrAnd(left, right) => ((tags & left) != 0) && ((tags & right) != 0)
         }
     }
 }
@@ -220,4 +292,16 @@ fn test_tags_filter7() {
 fn test_tags_filter8() {
     let current_tags = 2;
     assert_eq!(false, SecondaryTagsFilter::Or(1).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter9() {
+    let current_tags = 1 | 2;
+    assert_eq!(true, SecondaryTagsFilter::OrAnd(1, 2).accept(current_tags));
+}
+
+#[test]
+fn test_tags_filter10() {
+    let current_tags = 1;
+    assert_eq!(false, SecondaryTagsFilter::OrAnd(1, 2).accept(current_tags));
 }

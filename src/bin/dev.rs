@@ -8,13 +8,14 @@ use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::gauge::DefaultGaugeMetric;
 use metricsdb::metric::operations::TransformOperation;
+use metricsdb::metric::tags::{PrimaryTag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
-use metricsdb::tags::{PrimaryTag, TagsFilter};
 
 fn main() {
-    main_gauge();
+    // main_gauge();
     // main_count();
     // main_engine();
+    main_engine_existing();
 }
 
 #[derive(Deserialize)]
@@ -53,46 +54,54 @@ fn main_gauge() {
     // Avg: 0.6676723153748684
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg (tags=0,1): {}", metric.average(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
-        ).unwrap_or(0.0));
+        println!(
+            "Avg (tags=0,1): {}", metric.average(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+            ).value().unwrap_or(0.0)
+        );
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg (tags=0): {}", metric.average(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
-        ).unwrap_or(0.0));
+        println!(
+            "Avg (tags=0): {}",
+            metric.average(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
+            ).value().unwrap_or(0.0)
+        );
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg sqrt: {}", metric.average(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_input_transform(TransformOperation::Sqrt)
-        ).unwrap());
+        println!(
+            "Avg sqrt: {}",
+            metric.average(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_input_transform(TransformOperation::Sqrt)
+            ).value().unwrap()
+        );
     }
 
     {
         let _m = TimeMeasurement::new("max", TimeMeasurementUnit::Microseconds);
-        println!("Max: {}", metric.max(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+        println!("Max: {}", metric.max(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("95th", TimeMeasurementUnit::Microseconds);
-        println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).unwrap());
+        println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value().unwrap());
     }
 
     {
@@ -100,6 +109,8 @@ fn main_gauge() {
 
         let windows = metric.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
         // let windows = metric.percentile_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0), 95);
+
+        let windows = windows.time_values().unwrap();
         std::fs::write(
             &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()
@@ -136,36 +147,45 @@ fn main_count() {
 
     {
         let _m = TimeMeasurement::new("sum", TimeMeasurementUnit::Microseconds);
-        println!("Sum: {}", metric.sum(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+        println!("Sum: {}", metric.sum(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("average", TimeMeasurementUnit::Microseconds);
-        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).unwrap());
+        println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
     }
 
     {
         let _m = TimeMeasurement::new("sum", TimeMeasurementUnit::Microseconds);
-        println!("Sum (tags=0,1): {}", metric.sum(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
-        ).unwrap_or(0.0));
+        println!(
+            "Sum (tags=0,1): {}",
+            metric.sum(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+            ).value().unwrap_or(0.0)
+        );
     }
 
     {
         let _m = TimeMeasurement::new("sum", TimeMeasurementUnit::Microseconds);
-        println!("Sum (tags=0): {}", metric.sum(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
-        ).unwrap_or(0.0));
+        println!(
+            "Sum (tags=0): {}",
+            metric.sum(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
+            ).value().unwrap_or(0.0)
+        );
     }
 
     {
         let _m = TimeMeasurement::new("sum", TimeMeasurementUnit::Microseconds);
-        println!("Sum sqrt: {}", metric.sum(
-            Query::new(TimeRange::new(start_time, end_time))
-                .with_output_transform(TransformOperation::Sqrt)
-        ).unwrap());
+        println!(
+            "Sum sqrt: {}",
+            metric.sum(
+                Query::new(TimeRange::new(start_time, end_time))
+                    .with_output_transform(TransformOperation::Sqrt)
+            ).value().unwrap()
+        );
     }
 
     {
@@ -173,6 +193,8 @@ fn main_count() {
 
         let windows = metric.sum_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
         // let windows = metric.average_in_window(Query::new(TimeRange::new(start_time, end_time)), Duration::from_secs_f64(30.0));
+
+        let windows = windows.time_values().unwrap();
         std::fs::write(
             &Path::new("window.json"),
             serde_json::to_string(&windows).unwrap()
@@ -205,6 +227,18 @@ fn main_engine() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    println!("Avg: {}", metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap().unwrap());
-    println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().unwrap());
+    println!("Avg: {}", metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap().value().unwrap());
+    println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().value().unwrap());
+}
+
+fn main_engine_existing() {
+    let metrics_engine = MetricsEngine::from_existing(&Path::new("test_metric_server")).unwrap();
+
+    let start_time = 1667336006.3926258 - 10.0 * 60.0;
+    let end_time = 1667336006.3926258;
+
+    let query = Query::new(TimeRange::new(start_time, end_time));
+    let query = query.with_group_by("core".to_owned());
+    // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
+    println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
 }

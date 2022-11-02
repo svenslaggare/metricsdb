@@ -4,11 +4,11 @@ use std::time::Duration;
 use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
-use crate::metric::metric_operations;
+use crate::metric::{metric_operations, OperationResult};
+use crate::metric::tags::{PrimaryTag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
-use crate::tags::PrimaryTag;
 
 pub type DefaultGaugeMetric = GaugeMetric<FileMetricStorage<f32>>;
 
@@ -87,19 +87,19 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         result
     }
 
-    pub fn average(&self, query: Query) -> Option<f64> {
+    pub fn average(&self, query: Query) -> OperationResult {
         self.simple_operation::<StreamingAverage<f64>>(query)
     }
 
-    pub fn sum(&self, query: Query) -> Option<f64> {
+    pub fn sum(&self, query: Query) -> OperationResult {
         self.simple_operation::<StreamingSum<f64>>(query)
     }
 
-    pub fn max(&self, query: Query) -> Option<f64> {
+    pub fn max(&self, query: Query) -> OperationResult {
         self.simple_operation::<StreamingMax<f64>>(query)
     }
 
-    fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> Option<f64> {
+    fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> OperationResult {
         match query.input_transform {
             Some(op) => {
                 self.operation(query, |_| StreamingTransformOperation::<T>::from_default(op), false)
@@ -110,7 +110,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         }
     }
 
-    pub fn percentile(&self, query: Query, percentile: i32) -> Option<f64> {
+    pub fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
         let create = |stats: &TimeRangeStatistics<f32>, percentile: i32| {
             let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
             StreamingApproxPercentile::from_stats(&stats, percentile)
@@ -129,70 +129,96 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
     fn operation<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics<f32>>) -> T>(&self,
                                                                                             query: Query,
                                                                                             create_op: F,
-                                                                                            require_statistics: bool) -> Option<f64> {
+                                                                                            require_statistics: bool) -> OperationResult {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
-        let mut streaming_operations = Vec::new();
-        for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
-            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
-                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                    let stats = if require_statistics {
-                        Some(
-                            metric_operations::determine_statistics_for_time_range(
-                                &primary_tag.storage,
-                                start_time,
-                                end_time,
-                                tags_filter,
-                                start_block_index
+        let apply = |tags_filter: &TagsFilter| {
+            let mut streaming_operations = Vec::new();
+            for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
+                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
+                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                        let stats = if require_statistics {
+                            Some(
+                                metric_operations::determine_statistics_for_time_range(
+                                    &primary_tag.storage,
+                                    start_time,
+                                    end_time,
+                                    tags_filter,
+                                    start_block_index
+                                )
                             )
-                        )
-                    } else {
-                        None
-                    };
+                        } else {
+                            None
+                        };
 
-                    let mut streaming_operation = create_op(stats.as_ref());
-                    metric_operations::visit_datapoints_in_time_range(
-                        &primary_tag.storage,
-                        start_time,
-                        end_time,
-                        tags_filter,
-                        start_block_index,
-                        false,
-                        |_, datapoint| {
-                            streaming_operation.add(datapoint.value as f64);
-                        }
-                    );
+                        let mut streaming_operation = create_op(stats.as_ref());
+                        metric_operations::visit_datapoints_in_time_range(
+                            &primary_tag.storage,
+                            start_time,
+                            end_time,
+                            tags_filter,
+                            start_block_index,
+                            false,
+                            |_, _, datapoint| {
+                                streaming_operation.add(datapoint.value as f64);
+                            }
+                        );
 
-                    streaming_operations.push(streaming_operation);
+                        streaming_operations.push(streaming_operation);
+                    }
                 }
             }
-        }
 
-        if streaming_operations.is_empty() {
-            return None;
-        }
+            if streaming_operations.is_empty() {
+                return OperationResult::Value(None);
+            }
 
-        let streaming_operation = metric_operations::merge_operations(streaming_operations);
-        match query.output_transform {
-            Some(operation) => operation.apply(streaming_operation.value()?),
-            None => streaming_operation.value()
+            let streaming_operation = metric_operations::merge_operations(streaming_operations);
+            let value = match streaming_operation.value() {
+                Some(value) => value,
+                None => { return OperationResult::Value(None); }
+            };
+
+            OperationResult::Value(
+                match query.output_transform {
+                    Some(operation) => operation.apply(value),
+                    None => Some(value)
+                }
+            )
+        };
+
+        match &query.group_by {
+            None => {
+                apply(&query.tags_filter)
+            }
+            Some(key) => {
+                let mut groups = Vec::new();
+                for group_value in self.primary_tags_storage.gather_group_values(&query, key) {
+                    let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
+                    groups.push((group_value, apply(&tags_filter).value()));
+                }
+
+                groups.sort_by(|a, b| a.0.cmp(&b.0));
+
+                OperationResult::GroupValues(groups)
+            }
         }
     }
 
-    pub fn average_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         self.simple_operation_in_window::<StreamingAverage<f64>>(query, duration)
     }
 
-    pub fn sum_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         self.simple_operation_in_window::<StreamingSum<f64>>(query, duration)
     }
 
-    pub fn max_in_window(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         self.simple_operation_in_window::<StreamingMax<f64>>(query, duration)
     }
 
-    pub fn simple_operation_in_window<T: StreamingOperation<f64> + Default>(&self, query: Query, duration: Duration) -> Vec<(f64, f64)> {
+    pub fn simple_operation_in_window<T: StreamingOperation<f64> + Default>(&self, query: Query, duration: Duration) -> OperationResult {
         match query.input_transform {
             Some(op) => {
                 self.operation_in_window(query, duration, |_| StreamingTransformOperation::<T>::from_default(op), false)
@@ -203,7 +229,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         }
     }
 
-    pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> Vec<(f64, f64)> {
+    pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
         let create = |stats: &TimeRangeStatistics<f64>, percentile: i32| {
             StreamingApproxPercentile::from_stats(stats, percentile)
         };
@@ -222,7 +248,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                                                                                                       query: Query,
                                                                                                       duration: Duration,
                                                                                                       create_op: F,
-                                                                                                      require_statistics: bool) -> Vec<(f64, f64)> {
+                                                                                                      require_statistics: bool) -> OperationResult {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
@@ -244,7 +270,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                             tags_filter,
                             start_block_index,
                             false,
-                            |datapoint_time, datapoint| {
+                            |_, datapoint_time, datapoint| {
                                 let window_index = windowing.get_window_index(datapoint_time);
                                 if window_index < windowing.len() {
                                     window_stats[window_index]
@@ -266,7 +292,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                         tags_filter,
                         start_block_index,
                         false,
-                        |datapoint_time, datapoint| {
+                        |_, datapoint_time, datapoint| {
                             let window_index = windowing.get_window_index(datapoint_time);
                             if window_index < windowing.len() {
                                 windowing.get(window_index)
@@ -288,19 +314,21 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         }
 
         if primary_tags_windowing.is_empty() {
-            return Vec::new();
+            return OperationResult::TimeValues(Vec::new());
         }
 
-        metric_operations::extract_operations_in_windows(
-            metric_operations::merge_windowing(primary_tags_windowing),
-            |value| {
-                let value = value?;
+        OperationResult::TimeValues(
+            metric_operations::extract_operations_in_windows(
+                metric_operations::merge_windowing(primary_tags_windowing),
+                |value| {
+                    let value = value?;
 
-                match query.output_transform {
-                    Some(operation) => operation.apply(value),
-                    None => Some(value)
+                    match query.output_transform {
+                        Some(operation) => operation.apply(value),
+                        None => Some(value)
+                    }
                 }
-            }
+            )
         )
     }
 

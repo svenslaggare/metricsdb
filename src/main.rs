@@ -1,7 +1,6 @@
 mod helpers;
 mod storage;
 mod model;
-mod tags;
 mod metric;
 mod engine;
 mod server;
