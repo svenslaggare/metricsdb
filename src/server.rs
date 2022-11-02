@@ -166,7 +166,8 @@ struct MetricQuery {
     percentile: Option<i32>,
     duration: Option<f64>,
     tags: Option<Vec<String>>,
-    tags_filter_type: Option<TagsFilterType>
+    tags_filter_type: Option<TagsFilterType>,
+    group_by: Option<String>
 }
 
 async fn metric_query(State(state): State<Arc<AppState>>,
@@ -182,6 +183,10 @@ async fn metric_query(State(state): State<Arc<AppState>>,
                 query = query.with_tags_filter(TagsFilter::Or(tags));
             }
         }
+    }
+
+    if let Some(group_by) = input_query.group_by {
+        query = query.with_group_by(group_by);
     }
 
     let value = match input_query.operation {

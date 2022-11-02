@@ -200,7 +200,6 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                 }
 
                 groups.sort_by(|a, b| a.0.cmp(&b.0));
-
                 OperationResult::GroupValues(groups)
             }
         }

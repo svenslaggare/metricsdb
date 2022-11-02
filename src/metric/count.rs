@@ -154,7 +154,6 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                 }
 
                 groups.sort_by(|a, b| a.0.cmp(&b.0));
-
                 OperationResult::GroupValues(groups)
             }
         }
