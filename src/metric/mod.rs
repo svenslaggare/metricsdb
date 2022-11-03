@@ -12,7 +12,8 @@ use serde_json::json;
 pub enum OperationResult {
     Value(Option<f64>),
     TimeValues(Vec<(f64, f64)>),
-    GroupValues(Vec<(String, Option<f64>)>)
+    GroupValues(Vec<(String, Option<f64>)>),
+    GroupTimeValues(Vec<(String, Vec<(f64, f64)>)>)
 }
 
 impl OperationResult {
@@ -34,7 +35,8 @@ impl OperationResult {
         match self {
             OperationResult::Value(value) => json!(value),
             OperationResult::TimeValues(values) => json!(values),
-            OperationResult::GroupValues(values) => json!(values)
+            OperationResult::GroupValues(values) => json!(values),
+            OperationResult::GroupTimeValues(values) => json!(values)
         }
     }
 }
@@ -45,7 +47,8 @@ impl Display for OperationResult {
             OperationResult::Value(Some(value)) => write!(f, "{}", value),
             OperationResult::Value(None) => write!(f, "None"),
             OperationResult::TimeValues(values) => write!(f, "{:?}", values),
-            OperationResult::GroupValues(values) => write!(f, "{:?}", values)
+            OperationResult::GroupValues(values) => write!(f, "{:?}", values),
+            OperationResult::GroupTimeValues(values) => write!(f, "{:?}", values)
         }
     }
 }

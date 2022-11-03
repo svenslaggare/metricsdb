@@ -11,33 +11,35 @@ def main():
     cores = [None]
 
     while True:
-        time_now = time.time()
+        # time_now = time.time()
+        time_now = 1667336006.3926258
+        group_by = "core"
+        # group_by = None
 
-        for core in cores:
-            tags = None
-            if core is not None:
-                tags = ["core:" + core]
+        response = requests.post(
+            "http://localhost:9090/metrics/query/cpu_usage",
+            json={
+                "operation": "Average",
+                "duration": 10.0,
+                "group_by": group_by,
+                "start": time_now - 3.0 * 3600.0,
+                "end": time_now,
+            }
+        )
+        response.raise_for_status()
+        response_data = response.json()
 
-            response = requests.post(
-                "http://localhost:9090/metrics/query/cpu_usage",
-                json={
-                    "operation": "Average",
-                    # "percentile": 50,
-                    "duration": 10.0,
-                    "start": time_now - 3.0 * 3600.0,
-                    "end": time_now,
-                    "tags": tags
-                }
-            )
-            response.raise_for_status()
-            response_data = response.json()
+        groups = response_data["value"]
+        if group_by is None:
+            groups = [(None, response_data["value"])]
 
-            ts, ys = zip(*response_data["value"])
+        for group, values in groups:
+            ts, ys = zip(*values)
             ys = 100.0 * np.array(ys)
             ts = [datetime.datetime.fromtimestamp(t, tz=local_timezone) for t in ts]
-            plt.plot(ts, ys, "-o", label=core)
+            plt.plot(ts, ys, "-o", label=group)
 
-        if len(cores) > 1:
+        if group_by is not None:
             plt.legend()
 
         plt.ylim([0.0, 100.0])

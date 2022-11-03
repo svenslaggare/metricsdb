@@ -171,38 +171,27 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
             }
 
             if streaming_operations.is_empty() {
-                return OperationResult::Value(None);
+                return None;
             }
 
             let streaming_operation = metric_operations::merge_operations(streaming_operations);
             let value = match streaming_operation.value() {
                 Some(value) => value,
-                None => { return OperationResult::Value(None); }
+                None => { return None; }
             };
 
-            OperationResult::Value(
-                match query.output_transform {
-                    Some(operation) => operation.apply(value),
-                    None => Some(value)
-                }
-            )
+            match query.output_transform {
+                Some(operation) => operation.apply(value),
+                None => Some(value)
+            }
         };
 
         match &query.group_by {
             None => {
-                apply(&query.tags_filter)
+                OperationResult::Value(apply(&query.tags_filter))
             }
             Some(key) => {
-                let mut groups = self.primary_tags_storage.gather_group_values(&query, key)
-                    .into_iter()
-                    .map(|group_value| {
-                        let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
-                        (group_value, apply(&tags_filter).value())
-                    })
-                    .collect::<Vec<_>>();
-
-                groups.sort_by(|a, b| a.0.cmp(&b.0));
-                OperationResult::GroupValues(groups)
+                OperationResult::GroupValues(self.primary_tags_storage.apply_group_by(&query, key, apply))
             }
         }
     }
@@ -255,14 +244,37 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
         let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
 
-        let mut primary_tags_windowing = Vec::new();
-        for (primary_tag_value, primary_tag) in self.primary_tags_storage.iter() {
-            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
-                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                    let mut windowing = MetricWindowing::new(start_time, end_time, duration);
+        let apply = |tags_filter: &TagsFilter| {
+            let mut primary_tags_windowing = Vec::new();
+            for (primary_tag_value, primary_tag) in self.primary_tags_storage.iter() {
+                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
+                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                        let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
-                    let window_stats = if require_statistics {
-                        let mut window_stats = windowing.create_windows(|| None);
+                        let window_stats = if require_statistics {
+                            let mut window_stats = windowing.create_windows(|| None);
+
+                            metric_operations::visit_datapoints_in_time_range(
+                                &primary_tag.storage,
+                                start_time,
+                                end_time,
+                                tags_filter,
+                                start_block_index,
+                                false,
+                                |_, datapoint_time, datapoint| {
+                                    let window_index = windowing.get_window_index(datapoint_time);
+                                    if window_index < windowing.len() {
+                                        window_stats[window_index]
+                                            .get_or_insert_with(|| TimeRangeStatistics::default())
+                                            .handle(datapoint.value as f64);
+                                    }
+                                }
+                            );
+
+                            Some(window_stats)
+                        } else {
+                            None
+                        };
 
                         metric_operations::visit_datapoints_in_time_range(
                             &primary_tag.storage,
@@ -274,51 +286,28 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                             |_, datapoint_time, datapoint| {
                                 let window_index = windowing.get_window_index(datapoint_time);
                                 if window_index < windowing.len() {
-                                    window_stats[window_index]
-                                        .get_or_insert_with(|| TimeRangeStatistics::default())
-                                        .handle(datapoint.value as f64);
+                                    windowing.get(window_index)
+                                        .get_or_insert_with(|| {
+                                            if require_statistics {
+                                                create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
+                                            } else {
+                                                create_op(None)
+                                            }
+                                        })
+                                        .add(datapoint.value as f64);
                                 }
                             }
                         );
 
-                        Some(window_stats)
-                    } else {
-                        None
-                    };
-
-                    metric_operations::visit_datapoints_in_time_range(
-                        &primary_tag.storage,
-                        start_time,
-                        end_time,
-                        tags_filter,
-                        start_block_index,
-                        false,
-                        |_, datapoint_time, datapoint| {
-                            let window_index = windowing.get_window_index(datapoint_time);
-                            if window_index < windowing.len() {
-                                windowing.get(window_index)
-                                    .get_or_insert_with(|| {
-                                        if require_statistics {
-                                            create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
-                                        } else {
-                                            create_op(None)
-                                        }
-                                    })
-                                    .add(datapoint.value as f64);
-                            }
-                        }
-                    );
-
-                    primary_tags_windowing.push(windowing);
+                        primary_tags_windowing.push(windowing);
+                    }
                 }
             }
-        }
 
-        if primary_tags_windowing.is_empty() {
-            return OperationResult::TimeValues(Vec::new());
-        }
+            if primary_tags_windowing.is_empty() {
+                return Vec::new();
+            }
 
-        OperationResult::TimeValues(
             metric_operations::extract_operations_in_windows(
                 metric_operations::merge_windowing(primary_tags_windowing),
                 |value| {
@@ -330,7 +319,16 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                     }
                 }
             )
-        )
+        };
+
+        match &query.group_by {
+            None => {
+                OperationResult::TimeValues(apply(&query.tags_filter))
+            }
+            Some(key) => {
+                OperationResult::GroupTimeValues(self.primary_tags_storage.apply_group_by(&query, key, apply))
+            }
+        }
     }
 
     pub fn scheduled(&mut self) {

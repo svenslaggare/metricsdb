@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fnv::{FnvHashMap, FnvHashSet};
 
-use crate::metric::tags::{PrimaryTag, SecondaryTagsIndex};
+use crate::metric::tags::{PrimaryTag, SecondaryTagsIndex, TagsFilter};
 use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
 
@@ -117,6 +117,19 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn return_tags(&mut self, primary_tag_key: PrimaryTag, primary_tag: PrimaryTagMetric<TStorage, E>) {
         self.tags.insert(primary_tag_key, primary_tag);
+    }
+
+    pub fn apply_group_by<F: Fn(&TagsFilter) -> T, T>(&self, query: &Query, key: &str, apply: F) -> Vec<(String, T)> {
+        let mut groups = self.gather_group_values(&query, key)
+            .into_iter()
+            .map(|group_value| {
+                let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
+                (group_value, apply(&tags_filter))
+            })
+            .collect::<Vec<_>>();
+
+        groups.sort_by(|a, b| a.0.cmp(&b.0));
+        groups
     }
 
     pub fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
