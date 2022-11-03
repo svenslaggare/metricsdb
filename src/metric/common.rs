@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fnv::{FnvHashMap, FnvHashSet};
 
-use crate::metric::tags::{PrimaryTag, SecondaryTagsIndex, TagsFilter};
+use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, TagsFilter};
 use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
 
@@ -72,6 +72,14 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn iter(&self) -> impl Iterator<Item=(&PrimaryTag, &PrimaryTagMetric<TStorage, E>)> {
         self.tags.iter()
+    }
+
+    pub fn iter_for_query<'a>(&'a self, tags_filter: &'a TagsFilter) -> impl Iterator<Item=(&PrimaryTagMetric<TStorage, E>, SecondaryTagsFilter)> + '_ {
+        self.tags
+            .iter()
+            .map(|(primary_tag_key, primary_tag)| (primary_tag, tags_filter.apply(&primary_tag.tags_index, primary_tag_key)))
+            .filter(|(_, tags_filter)| tags_filter.is_some())
+            .map(|(primary_tag, tags_filter)| (primary_tag, tags_filter.unwrap()))
     }
 
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {

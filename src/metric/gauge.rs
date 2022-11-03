@@ -135,38 +135,36 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
         let apply = |tags_filter: &TagsFilter| {
             let mut streaming_operations = Vec::new();
-            for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
-                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
-                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                        let stats = if require_statistics {
-                            Some(
-                                metric_operations::determine_statistics_for_time_range(
-                                    &primary_tag.storage,
-                                    start_time,
-                                    end_time,
-                                    tags_filter,
-                                    start_block_index
-                                )
+            for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let stats = if require_statistics {
+                        Some(
+                            metric_operations::determine_statistics_for_time_range(
+                                &primary_tag.storage,
+                                start_time,
+                                end_time,
+                                tags_filter,
+                                start_block_index
                             )
-                        } else {
-                            None
-                        };
+                        )
+                    } else {
+                        None
+                    };
 
-                        let mut streaming_operation = create_op(stats.as_ref());
-                        metric_operations::visit_datapoints_in_time_range(
-                            &primary_tag.storage,
-                            start_time,
-                            end_time,
-                            tags_filter,
-                            start_block_index,
-                            false,
-                            |_, _, datapoint| {
-                                streaming_operation.add(datapoint.value as f64);
-                            }
-                        );
+                    let mut streaming_operation = create_op(stats.as_ref());
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |_, _, datapoint| {
+                            streaming_operation.add(datapoint.value as f64);
+                        }
+                    );
 
-                        streaming_operations.push(streaming_operation);
-                    }
+                    streaming_operations.push(streaming_operation);
                 }
             }
 
@@ -246,35 +244,12 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
         let apply = |tags_filter: &TagsFilter| {
             let mut primary_tags_windowing = Vec::new();
-            for (primary_tag_value, primary_tag) in self.primary_tags_storage.iter() {
-                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
-                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                        let mut windowing = MetricWindowing::new(start_time, end_time, duration);
+            for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
-                        let window_stats = if require_statistics {
-                            let mut window_stats = windowing.create_windows(|| None);
-
-                            metric_operations::visit_datapoints_in_time_range(
-                                &primary_tag.storage,
-                                start_time,
-                                end_time,
-                                tags_filter,
-                                start_block_index,
-                                false,
-                                |_, datapoint_time, datapoint| {
-                                    let window_index = windowing.get_window_index(datapoint_time);
-                                    if window_index < windowing.len() {
-                                        window_stats[window_index]
-                                            .get_or_insert_with(|| TimeRangeStatistics::default())
-                                            .handle(datapoint.value as f64);
-                                    }
-                                }
-                            );
-
-                            Some(window_stats)
-                        } else {
-                            None
-                        };
+                    let window_stats = if require_statistics {
+                        let mut window_stats = windowing.create_windows(|| None);
 
                         metric_operations::visit_datapoints_in_time_range(
                             &primary_tag.storage,
@@ -286,21 +261,42 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                             |_, datapoint_time, datapoint| {
                                 let window_index = windowing.get_window_index(datapoint_time);
                                 if window_index < windowing.len() {
-                                    windowing.get(window_index)
-                                        .get_or_insert_with(|| {
-                                            if require_statistics {
-                                                create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
-                                            } else {
-                                                create_op(None)
-                                            }
-                                        })
-                                        .add(datapoint.value as f64);
+                                    window_stats[window_index]
+                                        .get_or_insert_with(|| TimeRangeStatistics::default())
+                                        .handle(datapoint.value as f64);
                                 }
                             }
                         );
 
-                        primary_tags_windowing.push(windowing);
-                    }
+                        Some(window_stats)
+                    } else {
+                        None
+                    };
+
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |_, datapoint_time, datapoint| {
+                            let window_index = windowing.get_window_index(datapoint_time);
+                            if window_index < windowing.len() {
+                                windowing.get(window_index)
+                                    .get_or_insert_with(|| {
+                                        if require_statistics {
+                                            create_op((&window_stats.as_ref().unwrap()[window_index]).as_ref())
+                                        } else {
+                                            create_op(None)
+                                        }
+                                    })
+                                    .add(datapoint.value as f64);
+                            }
+                        }
+                    );
+
+                    primary_tags_windowing.push(windowing);
                 }
             }
 

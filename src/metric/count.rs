@@ -103,24 +103,22 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
         let apply = |tags_filter: &TagsFilter| {
             let mut streaming_operations = Vec::new();
-            for (primary_tag_key, primary_tag) in self.primary_tags_storage.iter() {
-                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
-                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                        let mut streaming_operation = create_op();
-                        metric_operations::visit_datapoints_in_time_range(
-                            &primary_tag.storage,
-                            start_time,
-                            end_time,
-                            tags_filter,
-                            start_block_index,
-                            false,
-                            |_, _, datapoint| {
-                                streaming_operation.add(datapoint.value as u64);
-                            }
-                        );
+            for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let mut streaming_operation = create_op();
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |_, _, datapoint| {
+                            streaming_operation.add(datapoint.value as u64);
+                        }
+                    );
 
-                        streaming_operations.push(streaming_operation);
-                    }
+                    streaming_operations.push(streaming_operation);
                 }
             }
 
@@ -171,30 +169,28 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
         let apply = |tags_filter: &TagsFilter| {
             let mut primary_tags_windowing = Vec::new();
-            for (primary_tag_value, primary_tag) in self.primary_tags_storage.iter() {
-                if let Some(tags_filter) = tags_filter.apply(&primary_tag.tags_index, primary_tag_value) {
-                    if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
-                        let mut windowing = MetricWindowing::new(start_time, end_time, duration);
+            for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
+                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                    let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
-                        metric_operations::visit_datapoints_in_time_range(
-                            &primary_tag.storage,
-                            start_time,
-                            end_time,
-                            tags_filter,
-                            start_block_index,
-                            false,
-                            |_, datapoint_time, datapoint| {
-                                let window_index = windowing.get_window_index(datapoint_time);
-                                if window_index < windowing.len() {
-                                    windowing.get(window_index)
-                                        .get_or_insert_with(|| { create_op((datapoint_time / TIME_SCALE) as f64, ((datapoint_time + duration) / TIME_SCALE) as f64) })
-                                        .add(datapoint.value as u64);
-                                }
+                    metric_operations::visit_datapoints_in_time_range(
+                        &primary_tag.storage,
+                        start_time,
+                        end_time,
+                        tags_filter,
+                        start_block_index,
+                        false,
+                        |_, datapoint_time, datapoint| {
+                            let window_index = windowing.get_window_index(datapoint_time);
+                            if window_index < windowing.len() {
+                                windowing.get(window_index)
+                                    .get_or_insert_with(|| { create_op((datapoint_time / TIME_SCALE) as f64, ((datapoint_time + duration) / TIME_SCALE) as f64) })
+                                    .add(datapoint.value as u64);
                             }
-                        );
+                        }
+                    );
 
-                        primary_tags_windowing.push(windowing);
-                    }
+                    primary_tags_windowing.push(windowing);
                 }
             }
 
