@@ -147,11 +147,13 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                 apply(&query.tags_filter)
             }
             Some(key) => {
-                let mut groups = Vec::new();
-                for group_value in self.primary_tags_storage.gather_group_values(&query, key) {
-                    let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
-                    groups.push((group_value, apply(&tags_filter).value()));
-                }
+                let mut groups = self.primary_tags_storage.gather_group_values(&query, key)
+                    .into_iter()
+                    .map(|group_value| {
+                        let tags_filter = query.tags_filter.clone().add_and_clause(vec![format!("{}:{}", key, group_value)]);
+                        (group_value, apply(&tags_filter).value())
+                    })
+                    .collect::<Vec<_>>();
 
                 groups.sort_by(|a, b| a.0.cmp(&b.0));
                 OperationResult::GroupValues(groups)
