@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use fnv::{FnvHashMap, FnvHashSet};
 
-use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, TagsFilter};
+use serde::{Serialize, Deserialize};
+
+use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, split_into_key_value, TagsFilter};
 use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
 
@@ -14,7 +16,8 @@ pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,
-    tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>
+    tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>,
+    config: PrimaryTagsStorageConfig
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
@@ -33,9 +36,13 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             }
         }
 
+        let config = PrimaryTagsStorageConfig::new();
+        config.save(&base_path.join("config.json"))?;
+
         let mut primary_tags_storage = PrimaryTagsStorage {
             base_path: base_path.to_owned(),
-            tags: FnvHashMap::default()
+            tags: FnvHashMap::default(),
+            config
         };
         primary_tags_storage.add_primary_tag(PrimaryTag::Default)?;
 
@@ -46,7 +53,8 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         Ok(
             PrimaryTagsStorage {
                 base_path: base_path.to_owned(),
-                tags: PrimaryTagsSerialization::new(base_path).load()?
+                tags: PrimaryTagsSerialization::new(base_path).load()?,
+                config: PrimaryTagsStorageConfig::load(&base_path.join("config.json"))?
             }
         )
     }
@@ -82,6 +90,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             .map(|(primary_tag, tags_filter)| (primary_tag, tags_filter.unwrap()))
     }
 
+    pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
+        self.tags.keys()
+    }
+
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         if !self.tags.contains_key(&tag) {
             let path = match &tag {
@@ -98,7 +110,15 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         Ok(())
     }
 
+    pub fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
+        self.config.auto_primary_tags.insert(key.to_owned());
+        self.config.save(&self.base_path.join("config.json"))?;
+        Ok(())
+    }
+
     pub fn insert_tags(&mut self, tags: &mut Vec<String>) -> MetricResult<(PrimaryTag, PrimaryTagMetric<TStorage, E>, Tags)> {
+        self.try_create_primary_tag(tags)?;
+
         let (primary_tag_key, mut primary_tag) = self.extract_primary_tag(tags);
         let secondary_tags = match primary_tag.tags_index.try_add_tags(&tags) {
             Ok(secondary_tags) => secondary_tags,
@@ -109,6 +129,19 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         };
 
         Ok((primary_tag_key, primary_tag, secondary_tags))
+    }
+
+    fn try_create_primary_tag(&mut self, tags: &Vec<String>) -> MetricResult<()> {
+        for tag in tags.iter() {
+            if let Some((key, _)) = split_into_key_value(tag) {
+                let new_primary_tag = PrimaryTag::Named(tag.to_owned());
+                if self.config.auto_primary_tags.contains(key) && !self.tags.contains_key(&new_primary_tag) {
+                    self.add_primary_tag(new_primary_tag)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn extract_primary_tag(&mut self, tags: &mut Vec<String>) -> (PrimaryTag, PrimaryTagMetric<TStorage, E>) {
@@ -140,7 +173,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         groups
     }
 
-    pub fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
+    fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
         let mut group_values = FnvHashSet::default();
 
         for (primary_tag_key, primary_tag) in self.iter() {
@@ -151,10 +184,9 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
                             let index_pattern = 1 << index as Tags;
                             if index_pattern & pattern != 0 {
                                 if let Some(key_value) = primary_tag.tags_index.tags_pattern_to_string(&index_pattern) {
-                                    let parts = key_value.split(":").collect::<Vec<_>>();
-                                    if parts.len() == 2 {
-                                        if parts[0] == key {
-                                            group_values.insert(parts[1].to_owned());
+                                    if let Some((current_key, current_value)) = split_into_key_value(key_value) {
+                                        if current_key == key {
+                                            group_values.insert(current_value.to_owned());
                                         }
                                     }
                                 }
@@ -211,6 +243,39 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PrimaryTagsStorageConfig {
+    auto_primary_tags: FnvHashSet<String>
+}
+
+impl PrimaryTagsStorageConfig {
+    pub fn new() -> PrimaryTagsStorageConfig {
+        PrimaryTagsStorageConfig {
+            auto_primary_tags: FnvHashSet::default()
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> MetricResult<()> {
+        let save = || {
+            let content = serde_json::to_string(self)?;
+            std::fs::write(path, &content)?;
+            Ok(())
+        };
+
+        save().map_err(|err| MetricError::FailedToSaveConfig(err))
+    }
+
+    pub fn load(path: &Path) -> MetricResult<PrimaryTagsStorageConfig> {
+        let load = || {
+            let content = std::fs::read_to_string(path)?;
+            let config: PrimaryTagsStorageConfig = serde_json::from_str(&content)?;
+            Ok(config)
+        };
+
+        load().map_err(|err| MetricError::FailedToLoadConfig(err))
+    }
+}
+
 struct PrimaryTagsSerialization {
     base_path: PathBuf,
     index_path: PathBuf
@@ -224,7 +289,8 @@ impl PrimaryTagsSerialization {
         }
     }
 
-    pub fn save<TStorage: MetricStorage<E>, E: Copy>(&self, primary_tags: &FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>) -> MetricResult<()> {
+    pub fn save<TStorage: MetricStorage<E>, E: Copy>(&self,
+                                                     primary_tags: &FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>) -> MetricResult<()> {
         let save = || -> std::io::Result<()> {
             let content = serde_json::to_string(&primary_tags.keys().collect::<Vec<_>>())?;
             std::fs::write(&self.index_path, &content)?;

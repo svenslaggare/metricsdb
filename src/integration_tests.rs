@@ -263,6 +263,40 @@ fn test_gauge_primary_tag_average2() {
 }
 
 #[test]
+fn test_gauge_auto_primary_tag_average1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec!["tag:T1", "tag:T2"];
+
+    let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
+    metric.add_auto_primary_tag("tag").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vec![&PrimaryTag::Default, &PrimaryTag::Named("tag:T1".to_owned()), &PrimaryTag::Named("tag:T2".to_owned())],
+        metric.primary_tags().collect::<Vec<_>>()
+    );
+
+    assert_eq!(
+        Some(0.6676723153748684),
+        metric.average(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+        ).value()
+    );
+}
+
+#[test]
 fn test_gauge_primary_tag_95th1() {
     let temp_metric_data = tempdir().unwrap();
 

@@ -12,6 +12,15 @@ pub enum PrimaryTag {
     Named(String)
 }
 
+pub fn split_into_key_value(key_value: &str) -> Option<(&str, &str)> {
+    let parts = key_value.split(":").collect::<Vec<_>>();
+    if parts.len() == 2 {
+        Some((parts[0], parts[1]))
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TagsFilter {
     None,

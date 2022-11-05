@@ -37,8 +37,16 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.primary_tags_storage.stats();
     }
 
+    pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
+        self.primary_tags_storage.primary_tags()
+    }
+
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         self.primary_tags_storage.add_primary_tag(tag)
+    }
+
+    pub fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
+        self.primary_tags_storage.add_auto_primary_tag(key)
     }
 
     pub fn add(&mut self, time: f64, value: f64, mut tags: Vec<String>) -> MetricResult<()> {
