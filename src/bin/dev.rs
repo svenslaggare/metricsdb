@@ -234,12 +234,12 @@ fn main_engine() {
 fn main_engine_existing() {
     let metrics_engine = MetricsEngine::from_existing(&Path::new("server_storage")).unwrap();
 
-    let start_time = 1667646811.4418015 - 10.0 * 60.0;
-    let end_time = 1667646811.4418015;
+    let start_time = 1667652117.2578413 - 10.0 * 60.0;
+    let end_time = 1667652117.2578413;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
-    let query = query.with_group_by("core".to_owned());
-    // let query = query.with_group_by("host".to_owned());
-    let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
+    // let query = query.with_group_by("core".to_owned());
+    let query = query.with_group_by("host".to_owned());
+    // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
     println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
 }

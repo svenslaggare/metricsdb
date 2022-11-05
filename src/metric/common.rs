@@ -107,7 +107,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
                 PrimaryTag::Named(tag) => self.base_path.join(&tag)
             };
 
-            let primary_tag = PrimaryTagMetric::new(&path, DEFAULT_BLOCK_DURATION, DEFAULT_DATAPOINT_DURATION)?;
+            let primary_tag = PrimaryTagMetric::new(&path, self.config.block_duration, self.config.datapoint_duration)?;
             primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
             self.tags.insert(tag, primary_tag);
             PrimaryTagsSerialization::new(&self.base_path).save(&self.tags)?;
@@ -260,13 +260,17 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
 
 #[derive(Serialize, Deserialize)]
 pub struct PrimaryTagsStorageConfig {
-    auto_primary_tags: FnvHashSet<String>
+    auto_primary_tags: FnvHashSet<String>,
+    block_duration: f64,
+    datapoint_duration: f64
 }
 
 impl PrimaryTagsStorageConfig {
     pub fn new() -> PrimaryTagsStorageConfig {
         PrimaryTagsStorageConfig {
-            auto_primary_tags: FnvHashSet::default()
+            auto_primary_tags: FnvHashSet::default(),
+            block_duration: DEFAULT_BLOCK_DURATION,
+            datapoint_duration: DEFAULT_DATAPOINT_DURATION
         }
     }
 
