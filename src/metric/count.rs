@@ -140,10 +140,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                 None => { return None; }
             };
 
-            match query.output_transform {
-                Some(operation) => operation.apply(value),
-                None => Some(value)
-            }
+            query.apply_output_transform(value)
         };
 
         match &query.group_by {
@@ -208,14 +205,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
             metric_operations::extract_operations_in_windows(
                 metric_operations::merge_windowing(primary_tags_windowing),
-                |value| {
-                    let value = value?;
-
-                    match query.output_transform {
-                        Some(operation) => operation.apply(value),
-                        None => Some(value)
-                    }
-                }
+                |value| query.apply_output_transform(value?)
             )
         };
 

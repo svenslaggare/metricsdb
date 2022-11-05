@@ -79,6 +79,13 @@ impl Query {
         new.group_by = Some(key);
         new
     }
+
+    pub fn apply_output_transform(&self, value: f64) -> Option<f64> {
+        match self.output_transform {
+            Some(operation) => operation.apply(value),
+            None => Some(value)
+        }
+    }
 }
 
 pub trait MinMax {
