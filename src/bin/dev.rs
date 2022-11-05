@@ -239,6 +239,7 @@ fn main_engine_existing() {
 
     let query = Query::new(TimeRange::new(start_time, end_time));
     let query = query.with_group_by("core".to_owned());
-    // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
+    // let query = query.with_group_by("host".to_owned());
+    let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
     println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
 }

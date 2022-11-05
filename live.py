@@ -11,8 +11,10 @@ def main():
     while True:
         time_now = time.time()
         # time_now = 1667336006.3926258
-        # group_by = "core"
-        group_by = None
+
+        group_by = "core"
+        # group_by = "host"
+        # group_by = None
 
         response = requests.post(
             "http://localhost:9090/metrics/query/cpu_usage",

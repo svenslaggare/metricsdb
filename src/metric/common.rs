@@ -183,19 +183,27 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         let named_primary_tags = HashSet::from_iter(self.named_primary_tags());
         let mut group_values = FnvHashSet::default();
 
+        let mut try_add_key_value = |key_value: &str| {
+            if let Some((current_key, current_value)) = split_into_key_value(key_value) {
+                if current_key == key {
+                    group_values.insert(current_value.to_owned());
+                }
+            }
+        };
+
         for (primary_tag_key, primary_tag) in self.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&named_primary_tags, primary_tag_key, &primary_tag.tags_index) {
+                if let Some(key_value) = primary_tag_key.named() {
+                    try_add_key_value(key_value);
+                }
+
                 for pattern in primary_tag.tags_index.all_patterns() {
                     if tags_filter.accept(*pattern) {
                         for index in 0..Tags::BITS {
                             let index_pattern = 1 << index as Tags;
                             if index_pattern & pattern != 0 {
                                 if let Some(key_value) = primary_tag.tags_index.tags_pattern_to_string(&index_pattern) {
-                                    if let Some((current_key, current_value)) = split_into_key_value(key_value) {
-                                        if current_key == key {
-                                            group_values.insert(current_value.to_owned());
-                                        }
-                                    }
+                                    try_add_key_value(key_value);
                                 }
                             }
                         }
