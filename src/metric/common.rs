@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -83,15 +84,20 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     }
 
     pub fn iter_for_query<'a>(&'a self, tags_filter: &'a TagsFilter) -> impl Iterator<Item=(&PrimaryTagMetric<TStorage, E>, SecondaryTagsFilter)> + '_ {
+        let named_primary_tags = HashSet::from_iter(self.named_primary_tags());
         self.tags
             .iter()
-            .map(|(primary_tag_key, primary_tag)| (primary_tag, tags_filter.apply(&primary_tag.tags_index, primary_tag_key)))
+            .map(move |(primary_tag_key, primary_tag)| (primary_tag, tags_filter.apply(&named_primary_tags, primary_tag_key, &primary_tag.tags_index)))
             .filter(|(_, tags_filter)| tags_filter.is_some())
             .map(|(primary_tag, tags_filter)| (primary_tag, tags_filter.unwrap()))
     }
 
     pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
         self.tags.keys()
+    }
+
+    fn named_primary_tags(&self) -> impl Iterator<Item=&str> {
+        self.tags.keys().map(|tag| tag.named()).flatten()
     }
 
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
@@ -174,10 +180,11 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     }
 
     fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
+        let named_primary_tags = HashSet::from_iter(self.named_primary_tags());
         let mut group_values = FnvHashSet::default();
 
         for (primary_tag_key, primary_tag) in self.iter() {
-            if let Some(tags_filter) = query.tags_filter.apply(&primary_tag.tags_index, primary_tag_key) {
+            if let Some(tags_filter) = query.tags_filter.apply(&named_primary_tags, primary_tag_key, &primary_tag.tags_index) {
                 for pattern in primary_tag.tags_index.all_patterns() {
                     if tags_filter.accept(*pattern) {
                         for index in 0..Tags::BITS {

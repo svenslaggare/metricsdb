@@ -170,6 +170,15 @@ impl MetricsEngine {
         Ok(())
     }
 
+    pub fn add_auto_primary_tag(&self, metric: &str, key: &str) -> MetricsEngineResult<()> {
+        match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
+            Metric::Gauge(metric) => metric.add_auto_primary_tag(key)?,
+            Metric::Count(metric) => metric.add_auto_primary_tag(key)?,
+        }
+
+        Ok(())
+    }
+
     pub fn add_primary_tag(&self, metric: &str, tag: PrimaryTag) -> MetricsEngineResult<()> {
         match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,

@@ -24,6 +24,7 @@ impl Default for AgentConfig {
 async fn main() {
     let mut cpu_usage_collector = CpuUsageCollector::new();
     let config = AgentConfig::default();
+    let hostname = gethostname::gethostname().to_str().unwrap().to_owned();
 
     let client = reqwest::Client::new();
     loop {
@@ -33,7 +34,13 @@ async fn main() {
             let cpu_usage_json = json!(
                 cpu_usage
                     .iter()
-                    .map(|(core_name, cpu_usage)| json!({ "time": time_now, "tags": vec![format!("core:{}", core_name)], "value": cpu_usage }))
+                    .map(|(core_name, cpu_usage)| {
+                        json!({
+                            "time": time_now,
+                            "tags": vec![format!("host:{}", hostname), format!("core:{}", core_name)],
+                            "value": cpu_usage
+                        })
+                    })
                     .collect::<Vec<_>>()
             );
 

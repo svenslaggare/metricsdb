@@ -86,7 +86,7 @@ struct AppState {
 impl AppState {
     pub fn new() -> AppState {
         AppState {
-            metrics_engine: MetricsEngine::new_or_from_existing(std::path::Path::new("test_metric_server")).unwrap()
+            metrics_engine: MetricsEngine::new_or_from_existing(std::path::Path::new("server_storage")).unwrap()
         }
     }
 }
@@ -108,13 +108,21 @@ async fn create_count_metric(State(state): State<Arc<AppState>>, Json(input): Js
 
 #[derive(Deserialize)]
 struct AddPrimaryTag {
-    tag: String
+    tag: String,
+    is_auto: Option<bool>
 }
 
 async fn add_primary_tag(State(state): State<Arc<AppState>>,
                          Path(name): Path<String>,
                          Json(primary_tag): Json<AddPrimaryTag>) -> ServerResult<Response> {
-    state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag))?;
+    let is_auto = primary_tag.is_auto.unwrap_or(false);
+
+    if is_auto {
+        state.metrics_engine.add_auto_primary_tag(&name, &primary_tag.tag)?;
+    } else {
+        state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag))?;
+    }
+
     Ok(Json(json!({})).into_response())
 }
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use fnv::FnvHashSet;
 
@@ -10,6 +10,15 @@ use crate::model::{MetricError, MetricResult, Tags};
 pub enum PrimaryTag {
     Default,
     Named(String)
+}
+
+impl PrimaryTag {
+    pub fn named(&self) -> Option<&str> {
+        match self {
+            PrimaryTag::Default => None,
+            PrimaryTag::Named(tag) => Some(tag)
+        }
+    }
 }
 
 pub fn split_into_key_value(key_value: &str) -> Option<(&str, &str)> {
@@ -30,10 +39,23 @@ pub enum TagsFilter {
 }
 
 impl TagsFilter {
-    pub fn apply(&self, tags_index: &SecondaryTagsIndex, primary_tag: &PrimaryTag) -> Option<SecondaryTagsFilter> {
+    pub fn apply(&self,
+                 named_primary_tags: &HashSet<&str>,
+                 primary_tag: &PrimaryTag,
+                 tags_index: &SecondaryTagsIndex) -> Option<SecondaryTagsFilter> {
         fn remove_tag<'a>(tags: &'a Vec<String>, primary_tag: &'a str) -> impl Iterator<Item=&'a String> {
             tags.iter().filter(move |tag| *tag != primary_tag)
         }
+
+        let contains_any_named_primary_tag = |tags: &Vec<String>| {
+            for tag in tags {
+                if named_primary_tags.contains(tag.as_str()) {
+                    return true;
+                }
+            }
+
+            false
+        };
 
         match self {
             TagsFilter::None => Some(SecondaryTagsFilter::None),
@@ -42,8 +64,10 @@ impl TagsFilter {
                     PrimaryTag::Named(primary_tag) => {
                         if tags.contains(primary_tag) {
                             Some(SecondaryTagsFilter::And(tags_index.tags_pattern(remove_tag(tags, primary_tag))?))
-                        } else {
+                        } else if contains_any_named_primary_tag(tags) {
                             None
+                        } else {
+                            Some(SecondaryTagsFilter::And(tags_index.tags_pattern(tags.iter())?))
                         }
                     }
                     PrimaryTag::Default => {
@@ -57,7 +81,7 @@ impl TagsFilter {
                         if tags.contains(primary_tag) {
                             Some(SecondaryTagsFilter::None)
                         } else {
-                            Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(remove_tag(tags, primary_tag))?))
+                            Some(SecondaryTagsFilter::Or(tags_index.tags_pattern(tags.iter())?))
                         }
                     }
                     PrimaryTag::Default => {
@@ -313,4 +337,47 @@ fn test_tags_filter9() {
 fn test_tags_filter10() {
     let current_tags = 1;
     assert_eq!(false, SecondaryTagsFilter::OrAnd(1, 2).accept(current_tags));
+}
+
+#[test]
+fn test_primary_tags_filter1() {
+    let tags_filter = TagsFilter::And(vec!["t1:v1".to_owned(), "t2:v1".to_owned()]);
+    let mut tags_index = SecondaryTagsIndex::new(Path::new("dummy"));
+    let pattern = tags_index.try_add("t2:v1").unwrap().0;
+    let mut primary_tags = HashSet::new();
+    primary_tags.insert("t1:v1");
+
+    assert_eq!(
+        Some(SecondaryTagsFilter::And(pattern)),
+        tags_filter.apply(&primary_tags, &PrimaryTag::Named("t1:v1".to_owned()), &tags_index)
+    )
+}
+
+#[test]
+fn test_primary_tags_filter2() {
+    let tags_filter = TagsFilter::And(vec!["t2:v1".to_owned()]);
+    let mut tags_index = SecondaryTagsIndex::new(Path::new("dummy"));
+    let pattern = tags_index.try_add("t2:v1").unwrap().0;
+    let mut primary_tags = HashSet::new();
+    primary_tags.insert("t1:v1");
+
+    assert_eq!(
+        Some(SecondaryTagsFilter::And(pattern)),
+        tags_filter.apply(&primary_tags, &PrimaryTag::Named("t1:v1".to_owned()), &tags_index)
+    )
+}
+
+#[test]
+fn test_primary_tags_filter3() {
+    let tags_filter = TagsFilter::And(vec!["t1:v1".to_owned(), "t2:v1".to_owned()]);
+    let mut tags_index = SecondaryTagsIndex::new(Path::new("dummy"));
+    tags_index.try_add("t2:v1").unwrap().0;
+    let mut primary_tags = HashSet::new();
+    primary_tags.insert("t1:v1");
+    primary_tags.insert("t1:v2");
+
+    assert_eq!(
+        None,
+        tags_filter.apply(&primary_tags, &PrimaryTag::Named("t1:v2".to_owned()), &tags_index)
+    )
 }

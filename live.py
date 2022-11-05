@@ -7,14 +7,12 @@ from matplotlib import pyplot as plt
 
 def main():
     local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
-    # cores = ["cpu{}".format(n) for n in range(16)]
-    cores = [None]
 
     while True:
-        # time_now = time.time()
-        time_now = 1667336006.3926258
-        group_by = "core"
-        # group_by = None
+        time_now = time.time()
+        # time_now = 1667336006.3926258
+        # group_by = "core"
+        group_by = None
 
         response = requests.post(
             "http://localhost:9090/metrics/query/cpu_usage",

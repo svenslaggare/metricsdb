@@ -232,10 +232,10 @@ fn main_engine() {
 }
 
 fn main_engine_existing() {
-    let metrics_engine = MetricsEngine::from_existing(&Path::new("test_metric_server")).unwrap();
+    let metrics_engine = MetricsEngine::from_existing(&Path::new("server_storage")).unwrap();
 
-    let start_time = 1667336006.3926258 - 10.0 * 60.0;
-    let end_time = 1667336006.3926258;
+    let start_time = 1667646811.4418015 - 10.0 * 60.0;
+    let end_time = 1667646811.4418015;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
     let query = query.with_group_by("core".to_owned());
