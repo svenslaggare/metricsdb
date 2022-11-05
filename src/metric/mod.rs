@@ -8,7 +8,7 @@ pub mod operations;
 use std::fmt::{Display};
 use serde_json::json;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {
     Value(Option<f64>),
     TimeValues(Vec<(f64, f64)>),

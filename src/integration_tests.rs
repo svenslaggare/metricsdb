@@ -8,6 +8,7 @@ use tempfile::tempdir;
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
+use crate::metric::OperationResult;
 use crate::metric::operations::TransformOperation;
 use crate::metric::tags::{PrimaryTag, TagsFilter};
 use crate::model::{Query, TimeRange};
@@ -173,6 +174,37 @@ fn test_gauge_95th1() {
     assert_eq!(
         Some(0.8005562248849434),
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value()
+    );
+}
+
+#[test]
+fn test_gauge_group_by_average1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec!["tag:T1", "tag:T2"];
+
+    let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        OperationResult::GroupValues(vec![
+            ("tag:T1".to_owned(), Some(0.6676758207088794)),
+            ("tag:T1".to_owned(), Some(0.6676688100408572))
+        ]),
+        metric.average(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_group_by("tag".to_owned())
+        )
     );
 }
 
