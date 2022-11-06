@@ -15,7 +15,7 @@ use axum::http::StatusCode;
 use axum::routing::{post, put};
 
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine, MetricsEngineError};
-use crate::metric::tags::{PrimaryTag, TagsFilter};
+use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
 pub async fn main() {
@@ -29,6 +29,7 @@ pub async fn main() {
 
         .route("/metrics/query/:name", post(metric_query))
         .route("/metrics/primary-tag/:name", post(add_primary_tag))
+        .route("/metrics/auto-primary-tag/:name", post(add_auto_primary_tag))
     ;
 
     tokio::spawn(async move {
@@ -108,21 +109,25 @@ async fn create_count_metric(State(state): State<Arc<AppState>>, Json(input): Js
 
 #[derive(Deserialize)]
 struct AddPrimaryTag {
-    tag: String,
-    is_auto: Option<bool>
+    tag: Tag
 }
 
 async fn add_primary_tag(State(state): State<Arc<AppState>>,
                          Path(name): Path<String>,
                          Json(primary_tag): Json<AddPrimaryTag>) -> ServerResult<Response> {
-    let is_auto = primary_tag.is_auto.unwrap_or(false);
+    state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag))?;
+    Ok(Json(json!({})).into_response())
+}
 
-    if is_auto {
-        state.metrics_engine.add_auto_primary_tag(&name, &primary_tag.tag)?;
-    } else {
-        state.metrics_engine.add_primary_tag(&name, PrimaryTag::Named(primary_tag.tag))?;
-    }
+#[derive(Deserialize)]
+struct AddAutoPrimaryTag {
+    key: String
+}
 
+async fn add_auto_primary_tag(State(state): State<Arc<AppState>>,
+                         Path(name): Path<String>,
+                         Json(primary_tag): Json<AddAutoPrimaryTag>) -> ServerResult<Response> {
+    state.metrics_engine.add_auto_primary_tag(&name, &primary_tag.key)?;
     Ok(Json(json!({})).into_response())
 }
 
@@ -173,7 +178,7 @@ struct MetricQuery {
     operation: MetricOperation,
     percentile: Option<i32>,
     duration: Option<f64>,
-    tags: Option<Vec<String>>,
+    tags: Option<Vec<Tag>>,
     tags_filter_type: Option<TagsFilterType>,
     group_by: Option<String>
 }

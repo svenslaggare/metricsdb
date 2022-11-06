@@ -11,7 +11,7 @@ use serde::{Serialize, Deserialize};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
-use crate::metric::tags::PrimaryTag;
+use crate::metric::tags::{PrimaryTag, Tag};
 use crate::model::{MetricError, Query};
 
 pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
@@ -39,11 +39,11 @@ impl From<MetricError> for MetricsEngineError {
 pub struct AddGaugeValue {
     pub time: f64,
     pub value: f64,
-    pub tags: Vec<String>
+    pub tags: Vec<Tag>
 }
 
 impl AddGaugeValue {
-    pub fn new(time: f64, value: f64, tags: Vec<String>) -> AddGaugeValue {
+    pub fn new(time: f64, value: f64, tags: Vec<Tag>) -> AddGaugeValue {
         AddGaugeValue {
             time,
             value,
@@ -56,11 +56,11 @@ impl AddGaugeValue {
 pub struct AddCountValue {
     pub time: f64,
     pub count: u16,
-    pub tags: Vec<String>
+    pub tags: Vec<Tag>
 }
 
 impl AddCountValue {
-    pub fn new(time: f64, value: u16, tags: Vec<String>) -> AddCountValue {
+    pub fn new(time: f64, value: u16, tags: Vec<Tag>) -> AddCountValue {
         AddCountValue {
             time,
             count: value,

@@ -5,7 +5,7 @@ use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::metric::{metric_operations, OperationResult};
-use crate::metric::tags::{PrimaryTag, TagsFilter};
+use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
@@ -49,7 +49,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.primary_tags_storage.add_auto_primary_tag(key)
     }
 
-    pub fn add(&mut self, time: f64, value: f64, mut tags: Vec<String>) -> MetricResult<()> {
+    pub fn add(&mut self, time: f64, value: f64, mut tags: Vec<Tag>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, f32>| {

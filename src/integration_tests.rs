@@ -10,7 +10,7 @@ use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
 use crate::metric::operations::TransformOperation;
-use crate::metric::tags::{PrimaryTag, TagsFilter};
+use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
 #[derive(Deserialize)]
@@ -58,7 +58,7 @@ fn test_gauge_average2() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
@@ -83,7 +83,7 @@ fn test_gauge_average3() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
@@ -100,7 +100,7 @@ fn test_gauge_average3() {
         Some(0.6676758207088794),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
+                .with_tags_filter(TagsFilter::And(vec![tags_list[0].clone()]))
         ).value()
     );
 }
@@ -183,7 +183,7 @@ fn test_gauge_group_by_average1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
 
@@ -214,11 +214,11 @@ fn test_gauge_group_by_average2() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -276,11 +276,11 @@ fn test_gauge_primary_tag_average1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -303,11 +303,11 @@ fn test_gauge_primary_tag_average2() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -322,7 +322,7 @@ fn test_gauge_primary_tag_average2() {
         Some(0.6676723153748684),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
         ).value()
     );
 }
@@ -333,7 +333,7 @@ fn test_gauge_auto_primary_tag_average1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
     metric.add_auto_primary_tag("tag").unwrap();
@@ -347,16 +347,18 @@ fn test_gauge_auto_primary_tag_average1() {
         }
     }
 
+    let mut primary_tags = metric.primary_tags().collect::<Vec<_>>();
+    primary_tags.sort();
     assert_eq!(
-        vec![&PrimaryTag::Default, &PrimaryTag::Named("tag:T1".to_owned()), &PrimaryTag::Named("tag:T2".to_owned())],
-        metric.primary_tags().collect::<Vec<_>>()
+        vec![&PrimaryTag::Default, &PrimaryTag::Named(tags_list[0].clone()), &PrimaryTag::Named(tags_list[1].clone())],
+        primary_tags
     );
 
     assert_eq!(
         Some(0.6676723153748684),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
         ).value()
     );
 }
@@ -367,11 +369,11 @@ fn test_gauge_primary_tag_95th1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -418,11 +420,11 @@ fn test_count_primary_tag_sum1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultCountMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -445,11 +447,11 @@ fn test_count_primary_tag_sum2() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let mut metric = DefaultCountMetric::new(temp_metric_data.path()).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -464,7 +466,7 @@ fn test_count_primary_tag_sum2() {
         Some(144328.0),
         metric.sum(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+                .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
         ).value()
     );
 }
@@ -475,7 +477,7 @@ fn test_metrics_engine1() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
     metrics_engine.add_gauge_metric("cpu").unwrap();

@@ -8,7 +8,7 @@ use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::gauge::DefaultGaugeMetric;
 use metricsdb::metric::operations::{FilterOperation, TransformOperation};
-use metricsdb::metric::tags::{PrimaryTag, TagsFilter};
+use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
 fn main() {
@@ -27,13 +27,13 @@ struct SampleData {
 fn main_gauge() {
     let data = std::fs::read_to_string("output.json").unwrap();
     let data: SampleData = serde_json::from_str(&data).unwrap();
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultGaugeMetric::new(Path::new("test_metric")).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
@@ -67,7 +67,7 @@ fn main_gauge() {
         println!(
             "Avg (tags=0,1): {}", metric.average(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
             ).value().unwrap_or(0.0)
         );
     }
@@ -78,7 +78,7 @@ fn main_gauge() {
             "Avg (tags=0): {}",
             metric.average(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
+                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].clone()]))
             ).value().unwrap_or(0.0)
         );
     }
@@ -121,13 +121,13 @@ fn main_gauge() {
 fn main_count() {
     let data = std::fs::read_to_string("output.json").unwrap();
     let data: SampleData = serde_json::from_str(&data).unwrap();
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultCountMetric::new(Path::new("test_metric")).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T1".to_owned())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named("tag:T2".to_owned())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     {
         let _m = TimeMeasurement::new("count", TimeMeasurementUnit::Seconds);
@@ -161,7 +161,7 @@ fn main_count() {
             "Sum (tags=0,1): {}",
             metric.sum(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].to_string(), tags_list[1].to_string()]))
+                    .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
             ).value().unwrap_or(0.0)
         );
     }
@@ -172,7 +172,7 @@ fn main_count() {
             "Sum (tags=0): {}",
             metric.sum(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].to_string()]))
+                    .with_tags_filter(TagsFilter::And(vec![tags_list[0].clone()]))
             ).value().unwrap_or(0.0)
         );
     }
@@ -205,7 +205,7 @@ fn main_count() {
 fn main_engine() {
     let data = std::fs::read_to_string("output.json").unwrap();
     let data: SampleData = serde_json::from_str(&data).unwrap();
-    let tags_list = vec!["tag:T1", "tag:T2"];
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     println!("n: {}", data.times.len());
 

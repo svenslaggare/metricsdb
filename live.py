@@ -10,7 +10,6 @@ def main():
 
     while True:
         time_now = time.time()
-        # time_now = 1667336006.3926258
 
         # group_by = "core"
         group_by = "host"
