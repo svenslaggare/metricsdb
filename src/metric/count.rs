@@ -96,11 +96,13 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
     }
 
     pub fn sum(&self, query: Query) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     pub fn average(&self, query: Query) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
     }
@@ -154,11 +156,13 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
     }
 
     pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
         assert!(query.input_transform.is_none(), "Input transform not supported.");
         self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
     }
