@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
+use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -108,30 +108,17 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
     }
 
     fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> OperationResult {
-        match query.input_transform {
-            Some(op) => {
-                self.operation(query, |_| StreamingTransformOperation::<T>::from_default(op), false)
-            }
-            None => {
-                self.operation(query, |_| T::default(), false)
-            }
-        }
+        metric_operations::apply_operation!(self, T, query, |_| T::default(), false)
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
-        let create = |stats: &TimeRangeStatistics<f32>, percentile: i32| {
+        let create = |stats: Option<&TimeRangeStatistics<f32>>| {
+            let stats = stats.unwrap();
             let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
             StreamingApproxPercentile::from_stats(&stats, percentile)
         };
 
-        match query.input_transform {
-            Some(op) => {
-                self.operation(query, |stats| StreamingTransformOperation::new(op, create(stats.unwrap(), percentile)), true)
-            }
-            None => {
-                self.operation(query, |stats| create(stats.unwrap(), percentile), true)
-            }
-        }
+        metric_operations::apply_operation!(self, StreamingApproxPercentile, query, create, true)
     }
 
     fn operation<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics<f32>>) -> T>(&self,
@@ -212,29 +199,17 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
     }
 
     pub fn simple_operation_in_window<T: StreamingOperation<f64> + Default>(&self, query: Query, duration: Duration) -> OperationResult {
-        match query.input_transform {
-            Some(op) => {
-                self.operation_in_window(query, duration, |_| StreamingTransformOperation::<T>::from_default(op), false)
-            }
-            None => {
-                self.operation_in_window(query, duration, |_| T::default(), false)
-            }
-        }
+        metric_operations::apply_operation_in_window!(self, T, query, duration, |_| T::default(), false)
     }
 
     pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
-        let create = |stats: &TimeRangeStatistics<f64>, percentile: i32| {
-            StreamingApproxPercentile::from_stats(stats, percentile)
+        let create = |stats: Option<&TimeRangeStatistics<f64>>| {
+            let stats = stats.unwrap();
+            let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
+            StreamingApproxPercentile::from_stats(&stats, percentile)
         };
 
-        match query.input_transform {
-            Some(op) => {
-                self.operation_in_window(query, duration, |stats| StreamingTransformOperation::new(op, create(stats.unwrap(), percentile)), true)
-            }
-            None => {
-                self.operation_in_window(query, duration, |stats| create(stats.unwrap(), percentile), true)
-            }
-        }
+        metric_operations::apply_operation_in_window!(self, StreamingApproxPercentile, query, duration, create, true)
     }
 
     fn operation_in_window<T: StreamingOperation<f64>, F: Fn(Option<&TimeRangeStatistics<f64>>) -> T>(&self,

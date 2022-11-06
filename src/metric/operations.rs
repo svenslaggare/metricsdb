@@ -404,6 +404,65 @@ impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformO
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FilterOperation {
+    GreaterThan(f64),
+    GreaterThanOrEqual(f64),
+    LessThan(f64),
+    LessThanOrEqual(f64)
+}
+
+impl FilterOperation {
+    pub fn accept(&self, value: f64) -> bool {
+        match self {
+            FilterOperation::GreaterThan(other) => value > *other,
+            FilterOperation::GreaterThanOrEqual(other) => value >= *other,
+            FilterOperation::LessThan(other) => value < *other,
+            FilterOperation::LessThanOrEqual(other) => value <= *other,
+        }
+    }
+}
+
+pub struct StreamingFilterOperation<T> {
+    operation: FilterOperation,
+    inner: T
+}
+
+impl<T: StreamingOperation<f64>> StreamingFilterOperation<T> {
+    pub fn new(operation: FilterOperation, inner: T) -> StreamingFilterOperation<T> {
+        StreamingFilterOperation {
+            operation,
+            inner
+        }
+    }
+}
+
+impl<T: StreamingOperation<f64> + Default> StreamingFilterOperation<T> {
+    pub fn from_default(operation: FilterOperation) -> StreamingFilterOperation<T> {
+        StreamingFilterOperation {
+            operation,
+            inner: Default::default()
+        }
+    }
+}
+
+impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingFilterOperation<T> {
+    fn add(&mut self, value: f64) {
+        if self.operation.accept(value) {
+            self.inner.add(value);
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.inner.value()
+    }
+
+    fn merge(&mut self, other: Self) {
+        assert_eq!(self.operation, other.operation);
+        self.inner.merge(other.inner);
+    }
+}
+
 #[test]
 fn test_streaming_histogram1() {
     let mut streaming = StreamingHistogram::new(1.0, 1001.0, 50);

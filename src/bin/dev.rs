@@ -7,7 +7,7 @@ use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::gauge::DefaultGaugeMetric;
-use metricsdb::metric::operations::TransformOperation;
+use metricsdb::metric::operations::{FilterOperation, TransformOperation};
 use metricsdb::metric::tags::{PrimaryTag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
@@ -238,8 +238,30 @@ fn main_engine_existing() {
     let end_time = 1667652117.2578413;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
+    let query = query.with_input_filter(FilterOperation::GreaterThan(0.7));
+    let query = query.with_input_transform(TransformOperation::Square);
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by("host".to_owned());
     // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
+
     println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
+
+    let windows = metrics_engine.average_in_window(
+        "cpu_usage",
+        Query::new(TimeRange::new(start_time, end_time)),
+        Duration::from_secs_f64(10.0)
+    ).unwrap();
+    // let windows = metrics_engine.percentile_in_window(
+    //     "cpu_usage",
+    //     Query::new(TimeRange::new(start_time, end_time)),
+    //     Duration::from_secs_f64(10.0),
+    //     95
+    // ).unwrap();
+
+
+    let windows = windows.time_values().unwrap();
+    std::fs::write(
+        &Path::new("window.json"),
+        serde_json::to_string(&windows).unwrap()
+    ).unwrap();
 }

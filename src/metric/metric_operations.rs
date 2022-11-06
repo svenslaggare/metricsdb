@@ -1,7 +1,52 @@
 use crate::model::{Datapoint, MinMax, Tags, Time, TIME_SCALE};
-use crate::metric::operations::StreamingOperation;
+use crate::metric::operations::{StreamingOperation};
 use crate::metric::tags::SecondaryTagsFilter;
 use crate::storage::MetricStorage;
+
+macro_rules! apply_operation {
+    ($self:expr, $T:ident, $query:expr, $create:expr, $require_stats:expr) => {
+        {
+           match ($query.input_filter, $query.input_transform) {
+                (Some(filter), Some(op)) => {
+                    $self.operation($query, |stats| StreamingFilterOperation::new(filter, StreamingTransformOperation::<$T>::new(op, $create(stats))), $require_stats)
+                }
+                (Some(filter), None) => {
+                    $self.operation($query, |stats| StreamingFilterOperation::<$T>::new(filter, $create(stats)), $require_stats)
+                }
+                (None, Some(op)) => {
+                    $self.operation($query, |stats| StreamingTransformOperation::<$T>::new(op, $create(stats)), $require_stats)
+                }
+                (None, None) => {
+                    $self.operation($query, |stats| $create(stats), $require_stats)
+                }
+            }
+        }
+    };
+}
+
+macro_rules! apply_operation_in_window {
+    ($self:expr, $T:ident, $query:expr, $duration:expr, $create:expr, $require_stats:expr) => {
+        {
+           match ($query.input_filter, $query.input_transform) {
+                (Some(filter), Some(op)) => {
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::new(filter, StreamingTransformOperation::<$T>::new(op, $create(stats))), $require_stats)
+                }
+                (Some(filter), None) => {
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<$T>::new(filter, $create(stats)), $require_stats)
+                }
+                (None, Some(op)) => {
+                    $self.operation_in_window($query, $duration, |stats| StreamingTransformOperation::<$T>::new(op, $create(stats)), $require_stats)
+                }
+                (None, None) => {
+                    $self.operation_in_window($query, $duration, |stats| $create(stats), $require_stats)
+                }
+            }
+        }
+    };
+}
+
+pub(crate) use apply_operation;
+pub(crate) use apply_operation_in_window;
 
 pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
