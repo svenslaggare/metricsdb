@@ -238,12 +238,20 @@ fn main_engine_existing() {
     let end_time = 1667652117.2578413;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
-    let query = query.with_input_filter(FilterExpression::Compare {
-        operation: CompareOperation::GreaterThan,
-        left: Box::new(FilterExpression::input_value()),
-        right: Box::new(FilterExpression::value(0.7))
-    });
-    let query = query.with_input_transform(TransformExpression::Function { function: Function::Square, arguments: vec![TransformExpression::InputValue] });
+
+    // let query = query.with_input_filter(FilterExpression::Compare {
+    //     operation: CompareOperation::GreaterThan,
+    //     left: Box::new(FilterExpression::input_value()),
+    //     right: Box::new(FilterExpression::value(0.7))
+    // });
+    // let query = query.with_input_transform(TransformExpression::Function { function: Function::Square, arguments: vec![TransformExpression::InputValue] });
+
+    // let query = query.with_output_filter(FilterExpression::Compare {
+    //     operation: CompareOperation::GreaterThan,
+    //     left: Box::new(FilterExpression::input_value()),
+    //     right: Box::new(FilterExpression::value(0.7))
+    // });
+
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by("host".to_owned());
     // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
@@ -252,16 +260,21 @@ fn main_engine_existing() {
 
     let windows = metrics_engine.average_in_window(
         "cpu_usage",
-        Query::new(TimeRange::new(start_time, end_time)),
+        Query::new(TimeRange::new(start_time, end_time))
+            .with_output_filter(FilterExpression::Compare {
+                operation: CompareOperation::GreaterThan,
+                left: Box::new(FilterExpression::input_value()),
+                right: Box::new(FilterExpression::value(0.2))
+            }),
         Duration::from_secs_f64(10.0)
     ).unwrap();
+
     // let windows = metrics_engine.percentile_in_window(
     //     "cpu_usage",
     //     Query::new(TimeRange::new(start_time, end_time)),
     //     Duration::from_secs_f64(10.0),
     //     95
     // ).unwrap();
-
 
     let windows = windows.time_values().unwrap();
     std::fs::write(

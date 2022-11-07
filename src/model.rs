@@ -42,6 +42,7 @@ pub struct Query {
     pub tags_filter: TagsFilter,
     pub input_filter: Option<FilterExpression>,
     pub input_transform: Option<TransformExpression>,
+    pub output_filter: Option<FilterExpression>,
     pub output_transform: Option<TransformExpression>,
     pub group_by: Option<String>
 }
@@ -53,6 +54,7 @@ impl Query {
             tags_filter: TagsFilter::None,
             input_filter: None,
             input_transform: None,
+            output_filter: None,
             output_transform: None,
             group_by: None
         }
@@ -76,6 +78,12 @@ impl Query {
         new
     }
 
+    pub fn with_output_filter(self, filter: FilterExpression) -> Query {
+        let mut new = self;
+        new.output_filter = Some(filter);
+        new
+    }
+
     pub fn with_output_transform(self, transform: TransformExpression) -> Query {
         let mut new = self;
         new.output_transform = Some(transform);
@@ -89,6 +97,12 @@ impl Query {
     }
 
     pub fn apply_output_transform(&self, value: f64) -> Option<f64> {
+        if let Some(filter) = &self.output_filter {
+            if !filter.evaluate(Some(value)).unwrap_or(false) {
+                return None;
+            }
+        }
+
         match &self.output_transform {
             Some(operation) => operation.evaluate(Some(value)),
             None => Some(value)
