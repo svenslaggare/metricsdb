@@ -6,15 +6,19 @@ use crate::storage::MetricStorage;
 macro_rules! apply_operation {
     ($self:expr, $T:ident, $query:expr, $create:expr, $require_stats:expr) => {
         {
-           match ($query.input_filter, $query.input_transform) {
-                (Some(filter), Some(op)) => {
-                    $self.operation($query, |stats| StreamingFilterOperation::new(filter, StreamingTransformOperation::<$T>::new(op, $create(stats))), $require_stats)
+           match (&$query.input_filter, &$query.input_transform) {
+                (Some(filter), Some(transform)) => {
+                    let filter = filter.clone();
+                    let transform = transform.clone();
+                    $self.operation($query, |stats| StreamingFilterOperation::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))), $require_stats)
                 }
                 (Some(filter), None) => {
-                    $self.operation($query, |stats| StreamingFilterOperation::<$T>::new(filter, $create(stats)), $require_stats)
+                    let filter = filter.clone();
+                    $self.operation($query, |stats| StreamingFilterOperation::<$T>::new(filter.clone(), $create(stats)), $require_stats)
                 }
-                (None, Some(op)) => {
-                    $self.operation($query, |stats| StreamingTransformOperation::<$T>::new(op, $create(stats)), $require_stats)
+                (None, Some(transform)) => {
+                    let transform = transform.clone();
+                    $self.operation($query, |stats| StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats)), $require_stats)
                 }
                 (None, None) => {
                     $self.operation($query, |stats| $create(stats), $require_stats)
@@ -27,15 +31,19 @@ macro_rules! apply_operation {
 macro_rules! apply_operation_in_window {
     ($self:expr, $T:ident, $query:expr, $duration:expr, $create:expr, $require_stats:expr) => {
         {
-           match ($query.input_filter, $query.input_transform) {
-                (Some(filter), Some(op)) => {
-                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::new(filter, StreamingTransformOperation::<$T>::new(op, $create(stats))), $require_stats)
+           match (&$query.input_filter, &$query.input_transform) {
+                (Some(filter), Some(transform)) => {
+                    let filter = filter.clone();
+                    let transform = transform.clone();
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))), $require_stats)
                 }
                 (Some(filter), None) => {
-                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<$T>::new(filter, $create(stats)), $require_stats)
+                    let filter = filter.clone();
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<$T>::new(filter.clone(), $create(stats)), $require_stats)
                 }
-                (None, Some(op)) => {
-                    $self.operation_in_window($query, $duration, |stats| StreamingTransformOperation::<$T>::new(op, $create(stats)), $require_stats)
+                (None, Some(transform)) => {
+                    let transform = transform.clone();
+                    $self.operation_in_window($query, $duration, |stats| StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats)), $require_stats)
                 }
                 (None, None) => {
                     $self.operation_in_window($query, $duration, |stats| $create(stats), $require_stats)

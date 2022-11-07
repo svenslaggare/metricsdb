@@ -137,12 +137,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
             }
 
             let streaming_operation = metric_operations::merge_operations(streaming_operations);
-            let value = match streaming_operation.value() {
-                Some(value) => value,
-                None => { return None; }
-            };
-
-            query.apply_output_transform(value)
+            query.apply_output_transform(streaming_operation.value()?)
         };
 
         match &query.group_by {

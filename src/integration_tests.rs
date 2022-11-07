@@ -7,9 +7,9 @@ use tempfile::tempdir;
 
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use crate::metric::count::DefaultCountMetric;
+use crate::metric::expression::{Function, TransformExpression};
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
-use crate::metric::operations::TransformOperation;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
@@ -126,7 +126,7 @@ fn test_gauge_average4() {
         Some(0.814266989356846),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_input_transform(TransformOperation::Sqrt)
+                .with_input_transform(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
         ).value()
     );
 }

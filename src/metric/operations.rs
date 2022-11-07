@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use crate::metric::expression::{FilterExpression, TransformExpression};
 
 use crate::metric::metric_operations::TimeRangeStatistics;
 use crate::model::{MinMax, TimeRange};
@@ -322,55 +323,13 @@ impl StreamingOperation<f64, f64> for StreamingApproxPercentile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TransformOperation {
-    Abs,
-    Max(f64),
-    Min(f64),
-    Round,
-    Ceil,
-    Floor,
-    Sqrt,
-    Square,
-    Power(f64),
-    Exponential,
-    LogE,
-    LogBase(f64),
-    Sin,
-    Cos,
-    Tan
-}
-
-impl TransformOperation {
-    pub fn apply(&self, value: f64) -> Option<f64> {
-        match self {
-            TransformOperation::Abs => Some(value.abs()),
-            TransformOperation::Max(other) => Some(value.max(*other)),
-            TransformOperation::Min(other) => Some(value.min(*other)),
-            TransformOperation::Round => Some(value.round()),
-            TransformOperation::Ceil => Some(value.ceil()),
-            TransformOperation::Floor => Some(value.floor()),
-            TransformOperation::Sqrt if value >= 0.0 => Some(value.sqrt()),
-            TransformOperation::Square => Some(value * value),
-            TransformOperation::Power(power) => Some(value.powf(*power)),
-            TransformOperation::Exponential => Some(value.exp()),
-            TransformOperation::LogE if value > 0.0 => Some(value.log2()),
-            TransformOperation::LogBase(base) if value > 0.0 => Some(value.log(*base)),
-            TransformOperation::Sin => Some(value.sin()),
-            TransformOperation::Cos => Some(value.cos()),
-            TransformOperation::Tan => Some(value.tan()),
-            _ => None
-        }
-    }
-}
-
 pub struct StreamingTransformOperation<T> {
-    operation: TransformOperation,
+    operation: TransformExpression,
     inner: T
 }
 
 impl<T: StreamingOperation<f64>> StreamingTransformOperation<T> {
-    pub fn new(operation: TransformOperation, inner: T) -> StreamingTransformOperation<T> {
+    pub fn new(operation: TransformExpression, inner: T) -> StreamingTransformOperation<T> {
         StreamingTransformOperation {
             operation,
             inner
@@ -379,7 +338,7 @@ impl<T: StreamingOperation<f64>> StreamingTransformOperation<T> {
 }
 
 impl<T: StreamingOperation<f64> + Default> StreamingTransformOperation<T> {
-    pub fn from_default(operation: TransformOperation) -> StreamingTransformOperation<T> {
+    pub fn from_default(operation: TransformExpression) -> StreamingTransformOperation<T> {
         StreamingTransformOperation {
             operation,
             inner: Default::default()
@@ -389,7 +348,7 @@ impl<T: StreamingOperation<f64> + Default> StreamingTransformOperation<T> {
 
 impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformOperation<T> {
     fn add(&mut self, value: f64) {
-        if let Some(value) = self.operation.apply(value) {
+        if let Some(value) = self.operation.evaluate(Some(value)) {
             self.inner.add(value);
         }
     }
@@ -404,32 +363,13 @@ impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformO
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FilterOperation {
-    GreaterThan(f64),
-    GreaterThanOrEqual(f64),
-    LessThan(f64),
-    LessThanOrEqual(f64)
-}
-
-impl FilterOperation {
-    pub fn accept(&self, value: f64) -> bool {
-        match self {
-            FilterOperation::GreaterThan(other) => value > *other,
-            FilterOperation::GreaterThanOrEqual(other) => value >= *other,
-            FilterOperation::LessThan(other) => value < *other,
-            FilterOperation::LessThanOrEqual(other) => value <= *other,
-        }
-    }
-}
-
 pub struct StreamingFilterOperation<T> {
-    operation: FilterOperation,
+    operation: FilterExpression,
     inner: T
 }
 
 impl<T: StreamingOperation<f64>> StreamingFilterOperation<T> {
-    pub fn new(operation: FilterOperation, inner: T) -> StreamingFilterOperation<T> {
+    pub fn new(operation: FilterExpression, inner: T) -> StreamingFilterOperation<T> {
         StreamingFilterOperation {
             operation,
             inner
@@ -438,7 +378,7 @@ impl<T: StreamingOperation<f64>> StreamingFilterOperation<T> {
 }
 
 impl<T: StreamingOperation<f64> + Default> StreamingFilterOperation<T> {
-    pub fn from_default(operation: FilterOperation) -> StreamingFilterOperation<T> {
+    pub fn from_default(operation: FilterExpression) -> StreamingFilterOperation<T> {
         StreamingFilterOperation {
             operation,
             inner: Default::default()
@@ -448,7 +388,7 @@ impl<T: StreamingOperation<f64> + Default> StreamingFilterOperation<T> {
 
 impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingFilterOperation<T> {
     fn add(&mut self, value: f64) {
-        if self.operation.accept(value) {
+        if self.operation.evaluate(Some(value)).unwrap_or(false) {
             self.inner.add(value);
         }
     }

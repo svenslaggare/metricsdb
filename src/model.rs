@@ -1,4 +1,4 @@
-use crate::metric::operations::{FilterOperation, TransformOperation};
+use crate::metric::expression::{FilterExpression, TransformExpression};
 use crate::metric::tags::TagsFilter;
 use crate::storage::memory_file::MemoryFileError;
 
@@ -40,9 +40,9 @@ impl TimeRange {
 pub struct Query {
     pub time_range: TimeRange,
     pub tags_filter: TagsFilter,
-    pub input_filter: Option<FilterOperation>,
-    pub input_transform: Option<TransformOperation>,
-    pub output_transform: Option<TransformOperation>,
+    pub input_filter: Option<FilterExpression>,
+    pub input_transform: Option<TransformExpression>,
+    pub output_transform: Option<TransformExpression>,
     pub group_by: Option<String>
 }
 
@@ -64,19 +64,19 @@ impl Query {
         new
     }
 
-    pub fn with_input_filter(self, filter: FilterOperation) -> Query {
+    pub fn with_input_filter(self, filter: FilterExpression) -> Query {
         let mut new = self;
         new.input_filter = Some(filter);
         new
     }
 
-    pub fn with_input_transform(self, transform: TransformOperation) -> Query {
+    pub fn with_input_transform(self, transform: TransformExpression) -> Query {
         let mut new = self;
         new.input_transform = Some(transform);
         new
     }
 
-    pub fn with_output_transform(self, transform: TransformOperation) -> Query {
+    pub fn with_output_transform(self, transform: TransformExpression) -> Query {
         let mut new = self;
         new.output_transform = Some(transform);
         new
@@ -89,8 +89,8 @@ impl Query {
     }
 
     pub fn apply_output_transform(&self, value: f64) -> Option<f64> {
-        match self.output_transform {
-            Some(operation) => operation.apply(value),
+        match &self.output_transform {
+            Some(operation) => operation.evaluate(Some(value)),
             None => Some(value)
         }
     }

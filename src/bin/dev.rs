@@ -6,8 +6,8 @@ use serde::Deserialize;
 use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::count::DefaultCountMetric;
+use metricsdb::metric::expression::{CompareOperation, FilterExpression, Function, TransformExpression};
 use metricsdb::metric::gauge::DefaultGaugeMetric;
-use metricsdb::metric::operations::{FilterOperation, TransformOperation};
 use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
@@ -89,7 +89,7 @@ fn main_gauge() {
             "Avg sqrt: {}",
             metric.average(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_input_transform(TransformOperation::Sqrt)
+                    .with_input_transform(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
             ).value().unwrap()
         );
     }
@@ -183,7 +183,7 @@ fn main_count() {
             "Sum sqrt: {}",
             metric.sum(
                 Query::new(TimeRange::new(start_time, end_time))
-                    .with_output_transform(TransformOperation::Sqrt)
+                    .with_output_transform(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
             ).value().unwrap()
         );
     }
@@ -238,8 +238,12 @@ fn main_engine_existing() {
     let end_time = 1667652117.2578413;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
-    let query = query.with_input_filter(FilterOperation::GreaterThan(0.7));
-    let query = query.with_input_transform(TransformOperation::Square);
+    let query = query.with_input_filter(FilterExpression::Compare {
+        operation: CompareOperation::GreaterThan,
+        left: Box::new(FilterExpression::input_value()),
+        right: Box::new(FilterExpression::value(0.7))
+    });
+    let query = query.with_input_transform(TransformExpression::Function { function: Function::Square, arguments: vec![TransformExpression::InputValue] });
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by("host".to_owned());
     // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
