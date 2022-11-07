@@ -226,17 +226,15 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
         Ok(())
     }
 
-    fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Box<dyn Iterator<Item=(Tags, &[Datapoint<E>])> + 'a>> {
+    type BlockIterator<'a> = SubBlockIterator<'a, E> where E: 'a;
+    fn block_datapoints<'a>(&'a self, block_index: usize) -> Option<Self::BlockIterator<'a>> {
         let block_ptr = self.block_at_ptr(block_index)?;
         Some(
-            Box::new(
-                SubBlockIterator {
-                    block_ptr,
-                    _phantom: Default::default(),
-                    sub_block_index: 0,
-                    num_sub_blocks: unsafe { (*block_ptr).num_sub_blocks }
-                }
-            )
+            SubBlockIterator {
+                block: unsafe { &*block_ptr },
+                sub_block_index: 0,
+                num_sub_blocks: unsafe { (*block_ptr).num_sub_blocks }
+            }
         )
     }
 
@@ -245,11 +243,10 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     }
 }
 
-struct SubBlockIterator<'a, E: Copy> {
-    block_ptr: *const Block<E>,
+pub struct SubBlockIterator<'a, E: Copy> {
+    block: &'a Block<E>,
     sub_block_index: usize,
-    num_sub_blocks: usize,
-    _phantom: PhantomData<&'a E>
+    num_sub_blocks: usize
 }
 
 impl<'a, E: Copy> Iterator for SubBlockIterator<'a, E> {
@@ -260,11 +257,9 @@ impl<'a, E: Copy> Iterator for SubBlockIterator<'a, E> {
             let current_index = self.sub_block_index;
             self.sub_block_index += 1;
 
-            unsafe {
-                let sub_block = &(*self.block_ptr).sub_blocks[current_index];
-                if sub_block.count > 0 {
-                    return Some((sub_block.tags, sub_block.datapoints(self.block_ptr)))
-                }
+            let sub_block = &self.block.sub_blocks[current_index];
+            if sub_block.count > 0 {
+                return Some((sub_block.tags, sub_block.datapoints(self.block)))
             }
         }
 
