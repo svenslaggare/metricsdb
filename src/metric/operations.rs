@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
-use crate::metric::expression::{FilterExpression, TransformExpression};
 
+use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
 use crate::metric::metric_operations::TimeRangeStatistics;
-use crate::model::{MinMax, TimeRange};
+use crate::metric::ratio::{Ratio};
+use crate::model::TimeRange;
+use crate::traits::{MinMax, ToExpressionValue};
 
 pub trait StreamingOperation<TInput, TOutput=TInput> {
     fn add(&mut self, value: TInput);
@@ -147,6 +149,42 @@ impl<T: Clone + Default + std::ops::AddAssign + DivConvert> StreamingOperation<T
     }
 }
 
+pub struct StreamingRatioValue<T: StreamingOperation<f64>> {
+    inner: T
+}
+
+impl<T: StreamingOperation<f64>> StreamingRatioValue<T> {
+    pub fn new(inner: T) -> StreamingRatioValue<T> {
+        StreamingRatioValue {
+            inner
+        }
+    }
+}
+
+impl<T: StreamingOperation<f64>> StreamingOperation<Ratio, f64> for StreamingRatioValue<T> {
+    fn add(&mut self, value: Ratio) {
+        if let Some(value) = value.value() {
+            self.inner.add(value);
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        self.inner.value()
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.inner.merge(other.inner)
+    }
+}
+
+impl<T: StreamingOperation<f64> + Default> StreamingRatioValue<T> {
+    pub fn from_default() -> StreamingRatioValue<T> {
+        StreamingRatioValue {
+            inner: Default::default()
+        }
+    }
+}
+
 pub trait DivConvert {
     fn div_convert(&self, other: f64) -> f64;
 }
@@ -250,13 +288,16 @@ impl StreamingHistogram {
     }
 
     fn add_with_count(&mut self, value: f64, count: usize) {
-        let bucket_float = (value - self.min) / (self.max - self.min);
-        let bucket_index = (bucket_float * (self.buckets.len() - 0) as f64).floor() as usize;
-
-        if bucket_index < self.buckets.len() {
-            self.total_count += count;
-            self.buckets[bucket_index] += count;
+        if self.buckets.len() == 0 {
+            return;
         }
+
+        let bucket_float = (value - self.min) / (self.max - self.min);
+        let bucket_index = (bucket_float * self.buckets.len() as f64).floor() as usize;
+        let bucket_index = bucket_index.min(self.buckets.len() - 1);
+
+        self.total_count += count;
+        self.buckets[bucket_index] += count;
     }
 }
 
@@ -348,7 +389,7 @@ impl<T: StreamingOperation<f64> + Default> StreamingTransformOperation<T> {
 
 impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformOperation<T> {
     fn add(&mut self, value: f64) {
-        if let Some(value) = self.operation.evaluate(Some(value)) {
+        if let Some(value) = self.operation.evaluate(&ExpressionValue::Float(value)) {
             self.inner.add(value);
         }
     }
@@ -363,32 +404,35 @@ impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformO
     }
 }
 
-pub struct StreamingFilterOperation<T> {
+pub struct StreamingFilterOperation<TInput, TOp> {
     operation: FilterExpression,
-    inner: T
+    inner: TOp,
+    _phantom: PhantomData<TInput>
 }
 
-impl<T: StreamingOperation<f64>> StreamingFilterOperation<T> {
-    pub fn new(operation: FilterExpression, inner: T) -> StreamingFilterOperation<T> {
+impl<TInput, TOp: StreamingOperation<TInput, f64>> StreamingFilterOperation<TInput, TOp> {
+    pub fn new(operation: FilterExpression, inner: TOp) -> StreamingFilterOperation<TInput, TOp> {
         StreamingFilterOperation {
             operation,
-            inner
+            inner,
+            _phantom: Default::default()
         }
     }
 }
 
-impl<T: StreamingOperation<f64> + Default> StreamingFilterOperation<T> {
-    pub fn from_default(operation: FilterExpression) -> StreamingFilterOperation<T> {
+impl<TInput, TOp: StreamingOperation<TInput, f64> + Default> StreamingFilterOperation<TInput, TOp> {
+    pub fn from_default(operation: FilterExpression) -> StreamingFilterOperation<TInput, TOp> {
         StreamingFilterOperation {
             operation,
-            inner: Default::default()
+            inner: Default::default(),
+            _phantom: Default::default()
         }
     }
 }
 
-impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingFilterOperation<T> {
-    fn add(&mut self, value: f64) {
-        if self.operation.evaluate(Some(value)).unwrap_or(false) {
+impl<TInput: ToExpressionValue, TOp: StreamingOperation<TInput, f64>> StreamingOperation<TInput, f64> for StreamingFilterOperation<TInput, TOp> {
+    fn add(&mut self, value: TInput) {
+        if self.operation.evaluate(&value.to_value()).unwrap_or(false) {
             self.inner.add(value);
         }
     }

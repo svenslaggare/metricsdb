@@ -1,4 +1,5 @@
 mod helpers;
+mod traits;
 mod storage;
 mod model;
 mod metric;

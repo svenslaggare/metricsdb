@@ -1,4 +1,19 @@
 use serde::{Deserialize, Serialize};
+use crate::metric::ratio::Ratio;
+
+pub enum ExpressionValue {
+    Float(f64),
+    Ratio(Ratio)
+}
+
+impl ExpressionValue {
+    pub fn float(&self) -> Option<f64> {
+        match self {
+            ExpressionValue::Float(value) => Some(*value),
+            ExpressionValue::Ratio(value) => value.value()
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum TransformExpression {
@@ -9,9 +24,9 @@ pub enum TransformExpression {
 }
 
 impl TransformExpression {
-    pub fn evaluate(&self, input: Option<f64>) -> Option<f64> {
+    pub fn evaluate(&self, input: &ExpressionValue) -> Option<f64> {
         match self {
-            TransformExpression::InputValue => input,
+            TransformExpression::InputValue => input.float(),
             TransformExpression::Value { value } => Some(*value),
             TransformExpression::Arithmetic { operation, left, right } => {
                 let left = left.evaluate(input)?;
@@ -70,11 +85,11 @@ impl FilterExpression {
         FilterExpression::Transform { expression: TransformExpression::Value { value } }
     }
 
-    pub fn evaluate(&self, input: Option<f64>) -> Option<bool> {
+    pub fn evaluate(&self, input: &ExpressionValue) -> Option<bool> {
         self.evaluate_internal(input)?.bool()
     }
 
-    fn evaluate_internal(&self, input: Option<f64>) -> Option<FilterExpressionResult> {
+    fn evaluate_internal(&self, input: &ExpressionValue) -> Option<FilterExpressionResult> {
         match self {
             FilterExpression::Transform { expression } => {
                 Some(FilterExpressionResult::Float(expression.evaluate(input)?))
@@ -168,7 +183,7 @@ fn test_transform1() {
         right: Box::new(TransformExpression::InputValue)
     };
 
-    assert_eq!(Some(16.0), expression.evaluate(Some(4.0)));
+    assert_eq!(Some(16.0), expression.evaluate(&ExpressionValue::Float(4.0)));
 }
 
 #[test]
@@ -179,7 +194,7 @@ fn test_transform2() {
         right: Box::new(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
     };
 
-    assert_eq!(Some(4.0 + 4.0f64.sqrt()), expression.evaluate(Some(4.0)));
+    assert_eq!(Some(4.0 + 4.0f64.sqrt()), expression.evaluate(&ExpressionValue::Float(4.0)));
 }
 
 
@@ -191,6 +206,6 @@ fn test_filter1() {
         right: Box::new(FilterExpression::Transform { expression: TransformExpression::Value { value: 0.7 } })
     };
 
-    assert_eq!(Some(true), expression.evaluate(Some(0.9)));
-    assert_eq!(Some(false), expression.evaluate(Some(0.6)));
+    assert_eq!(Some(true), expression.evaluate(&ExpressionValue::Float(0.9)));
+    assert_eq!(Some(false), expression.evaluate(&ExpressionValue::Float(0.6)));
 }

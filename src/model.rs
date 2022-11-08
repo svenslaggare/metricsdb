@@ -1,4 +1,4 @@
-use crate::metric::expression::{FilterExpression, TransformExpression};
+use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
 use crate::metric::tags::TagsFilter;
 use crate::storage::memory_file::MemoryFileError;
 
@@ -98,57 +98,14 @@ impl Query {
 
     pub fn apply_output_transform(&self, value: f64) -> Option<f64> {
         if let Some(filter) = &self.output_filter {
-            if !filter.evaluate(Some(value)).unwrap_or(false) {
+            if !filter.evaluate(&ExpressionValue::Float(value)).unwrap_or(false) {
                 return None;
             }
         }
 
         match &self.output_transform {
-            Some(operation) => operation.evaluate(Some(value)),
+            Some(operation) => operation.evaluate(&ExpressionValue::Float(value)),
             None => Some(value)
-        }
-    }
-}
-
-pub trait MinMax {
-    fn min(&self, other: Self) -> Self;
-    fn max(&self, other: Self) -> Self;
-}
-
-impl MinMax for f64 {
-    fn min(&self, other: Self) -> Self {
-        f64::min(*self, other)
-    }
-
-    fn max(&self, other: Self) -> Self {
-        f64::max(*self, other)
-    }
-}
-
-impl MinMax for f32 {
-    fn min(&self, other: Self) -> Self {
-        f32::min(*self, other)
-    }
-
-    fn max(&self, other: Self) -> Self {
-        f32::max(*self, other)
-    }
-}
-
-impl MinMax for u32 {
-    fn min(&self, other: Self) -> Self {
-        if self < &other {
-            *self
-        } else {
-            other
-        }
-    }
-
-    fn max(&self, other: Self) -> Self {
-        if self > &other {
-            *self
-        } else {
-            other
         }
     }
 }

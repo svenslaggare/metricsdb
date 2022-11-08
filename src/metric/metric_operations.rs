@@ -1,60 +1,8 @@
-use crate::model::{Datapoint, MinMax, Tags, Time, TIME_SCALE};
-use crate::metric::operations::{StreamingOperation};
+use crate::model::{Datapoint, Tags, Time, TIME_SCALE};
+use crate::metric::operations::StreamingOperation;
 use crate::metric::tags::SecondaryTagsFilter;
 use crate::storage::MetricStorage;
-
-macro_rules! apply_operation {
-    ($self:expr, $T:ident, $query:expr, $create:expr, $require_stats:expr) => {
-        {
-           match (&$query.input_filter, &$query.input_transform) {
-                (Some(filter), Some(transform)) => {
-                    let filter = filter.clone();
-                    let transform = transform.clone();
-                    $self.operation($query, |stats| StreamingFilterOperation::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))), $require_stats)
-                }
-                (Some(filter), None) => {
-                    let filter = filter.clone();
-                    $self.operation($query, |stats| StreamingFilterOperation::<$T>::new(filter.clone(), $create(stats)), $require_stats)
-                }
-                (None, Some(transform)) => {
-                    let transform = transform.clone();
-                    $self.operation($query, |stats| StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats)), $require_stats)
-                }
-                (None, None) => {
-                    $self.operation($query, |stats| $create(stats), $require_stats)
-                }
-            }
-        }
-    };
-}
-
-macro_rules! apply_operation_in_window {
-    ($self:expr, $T:ident, $query:expr, $duration:expr, $create:expr, $require_stats:expr) => {
-        {
-           match (&$query.input_filter, &$query.input_transform) {
-                (Some(filter), Some(transform)) => {
-                    let filter = filter.clone();
-                    let transform = transform.clone();
-                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))), $require_stats)
-                }
-                (Some(filter), None) => {
-                    let filter = filter.clone();
-                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<$T>::new(filter.clone(), $create(stats)), $require_stats)
-                }
-                (None, Some(transform)) => {
-                    let transform = transform.clone();
-                    $self.operation_in_window($query, $duration, |stats| StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats)), $require_stats)
-                }
-                (None, None) => {
-                    $self.operation_in_window($query, $duration, |stats| $create(stats), $require_stats)
-                }
-            }
-        }
-    };
-}
-
-pub(crate) use apply_operation;
-pub(crate) use apply_operation_in_window;
+use crate::traits::MinMax;
 
 pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage, time: Time) -> Option<usize> {
     if storage.len() == 0 {
@@ -175,6 +123,7 @@ pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy +
     stats
 }
 
+#[derive(Debug)]
 pub struct TimeRangeStatistics<T> {
     pub count: usize,
     min: Option<T>,

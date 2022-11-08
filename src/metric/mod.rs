@@ -1,7 +1,9 @@
-pub mod common;
-pub mod tags;
 pub mod gauge;
 pub mod count;
+pub mod ratio;
+
+pub mod common;
+pub mod tags;
 mod metric_operations;
 pub mod operations;
 pub mod expression;

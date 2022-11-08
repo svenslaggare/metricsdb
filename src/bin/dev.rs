@@ -8,14 +8,16 @@ use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::expression::{CompareOperation, FilterExpression, Function, TransformExpression};
 use metricsdb::metric::gauge::DefaultGaugeMetric;
+use metricsdb::metric::ratio::DefaultRatioMetric;
 use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
 fn main() {
     // main_gauge();
     // main_count();
+    main_ratio();
     // main_engine();
-    main_engine_existing();
+    // main_engine_existing();
 }
 
 #[derive(Deserialize)]
@@ -200,6 +202,47 @@ fn main_count() {
             serde_json::to_string(&windows).unwrap()
         ).unwrap();
     }
+}
+
+fn main_ratio() {
+    let data = std::fs::read_to_string("output.json").unwrap();
+    let data: SampleData = serde_json::from_str(&data).unwrap();
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
+
+    println!("n: {}", data.times.len());
+
+    let mut metric = DefaultRatioMetric::new(Path::new("test_metric")).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
+
+    {
+        let _m = TimeMeasurement::new("ratio", TimeMeasurementUnit::Seconds);
+        for index in 0..data.times.len() {
+            let tags = vec![tags_list[(index % 2)].to_owned()];
+            metric.add(data.times[index], 1, 1 + (index % 3) as u16, tags).unwrap();
+        }
+    }
+
+    metric.stats();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    println!("Avg: {}", metric.average(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
+    println!("Sum: {}", metric.sum(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
+    println!("Max: {}", metric.max(Query::new(TimeRange::new(start_time, end_time))).value().unwrap());
+    println!("95th: {}", metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value().unwrap());
+
+    let windows = metric.sum_in_window(
+        Query::new(TimeRange::new(start_time, end_time)),
+        Duration::from_secs_f64(30.0)
+    );
+
+    let windows = windows.time_values().unwrap();
+    std::fs::write(
+        &Path::new("window.json"),
+        serde_json::to_string(&windows).unwrap()
+    ).unwrap();
 }
 
 fn main_engine() {

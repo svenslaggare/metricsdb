@@ -9,8 +9,23 @@ def main():
 
     start_time = datetime.datetime(2022, 6, 1, 12, 0, 0).timestamp()
     duration = 7.0 * 24.0 * 3600.0
-    event_frequency = 20.0
 
+    times, values = generate(start_time, duration, 20.0)
+
+    with open("output.json", "w") as f:
+        json.dump({
+            "times": [current.timestamp() for current in times],
+            "values": values
+        }, f)
+
+    np.random.seed(4711)
+
+    print(len(times), len(times) / duration)
+    plt.plot(times, values)
+    plt.ylim([0.0, 1.0])
+    plt.show()
+
+def generate(start_time, duration, event_frequency):
     times = []
     values = []
 
@@ -24,16 +39,7 @@ def main():
         delta = np.random.exponential(1.0 / event_frequency)
         current_time += delta
 
-    with open("output.json", "w") as f:
-        json.dump({
-            "times": [current.timestamp() for current in times],
-            "values": values
-        }, f)
-
-    print(len(times), len(times) / duration)
-    plt.plot(times, values)
-    plt.ylim([0.0, 1.0])
-    plt.show()
+    return times, values
 
 if __name__ == "__main__":
     main()
