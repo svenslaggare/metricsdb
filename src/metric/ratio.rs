@@ -2,7 +2,7 @@ use std::ops::AddAssign;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{CountInput, PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{CountInput, GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation};
 use crate::metric::{metric_operations, OperationResult};
@@ -71,93 +71,8 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
         )
     }
 
-    pub fn stats(&self) {
-        self.primary_tags_storage.stats();
-    }
-
     pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
         self.primary_tags_storage.primary_tags()
-    }
-
-    pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
-        self.primary_tags_storage.add_primary_tag(tag)
-    }
-
-    pub fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
-        self.primary_tags_storage.add_auto_primary_tag(key)
-    }
-
-    pub fn add(&mut self, time: f64, numerator: CountInput, denominator: CountInput, mut tags: Vec<Tag>) -> MetricResult<()> {
-        let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
-
-        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, RatioU32>| {
-            let time = (time * TIME_SCALE as f64).round() as Time;
-            let value = RatioU32(numerator.value()?, denominator.value()?);
-
-            let mut datapoint = Datapoint {
-                time_offset: 0,
-                value
-            };
-
-            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
-                if time < block_end_time {
-                    return Err(MetricError::InvalidTimeOrder);
-                }
-
-                let time_offset = time - block_start_time;
-                if time_offset < primary_tag.storage.block_duration() {
-                    assert!(time_offset < u32::MAX as u64);
-                    datapoint.time_offset = time_offset as u32;
-
-                    let datapoint_duration = primary_tag.storage.datapoint_duration();
-                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
-                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
-                            last_datapoint.value += value;
-                            return Ok(());
-                        }
-                    }
-
-                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
-                } else {
-                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-                }
-            } else {
-                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-            }
-
-            Ok(())
-        };
-
-        let result = add(&mut primary_tag);
-        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
-        result
-    }
-
-    pub fn average(&self, query: Query) -> OperationResult {
-        type Op = StreamingRatioValue<StreamingAverage<f64>>;
-        apply_operation!(self, Op, query, |_| Op::from_default(), false)
-    }
-
-    pub fn sum(&self, query: Query) -> OperationResult {
-        self.operation(query, |_| ratio_sum(), false)
-    }
-
-    pub fn max(&self, query: Query) -> OperationResult {
-        type Op = StreamingRatioValue<StreamingMax<f64>>;
-        apply_operation!(self, Op, query, |_| Op::from_default(), false)
-    }
-
-    pub fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<RatioU32>>| {
-            let stats = stats.unwrap();
-            let min = stats.min().value().unwrap_or(0.0);
-            let max = stats.max().value().unwrap_or(1.0);
-            let stats = TimeRangeStatistics::new(stats.count, min, max);
-            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
-        };
-
-        type Op = StreamingRatioValue<StreamingApproxPercentile>;
-        apply_operation!(self, Op, query, create, true)
     }
 
     fn operation<T: StreamingOperation<Ratio, f64>, F: Fn(Option<&TimeRangeStatistics<RatioU32>>) -> T>(&self,
@@ -218,33 +133,6 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
                 OperationResult::GroupValues(self.primary_tags_storage.apply_group_by(&query, key, apply))
             }
         }
-    }
-
-    pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        type Op = StreamingRatioValue<StreamingAverage<f64>>;
-        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
-    }
-
-    pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        self.operation_in_window(query, duration, |_| ratio_sum(), false)
-    }
-
-    pub fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        type Op = StreamingRatioValue<StreamingMax<f64>>;
-        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
-    }
-
-    pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<Ratio>>| {
-            let stats = stats.unwrap();
-            let min = stats.min().value().unwrap_or(0.0);
-            let max = stats.max().value().unwrap_or(1.0);
-            let stats = TimeRangeStatistics::new(stats.count, min, max);
-            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
-        };
-
-        type Op = StreamingRatioValue<StreamingApproxPercentile>;
-        apply_operation_in_window!(self, Op, query, duration, create, true)
     }
 
     fn operation_in_window<T: StreamingOperation<Ratio, f64>, F: Fn(Option<&TimeRangeStatistics<Ratio>>) -> T>(&self,
@@ -334,8 +222,123 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
             }
         }
     }
+}
 
-    pub fn scheduled(&mut self) {
+impl<TStorage: MetricStorage<RatioU32>> GenericMetric for RatioMetric<TStorage> {
+    fn stats(&self) {
+        self.primary_tags_storage.stats();
+    }
+
+    fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
+        self.primary_tags_storage.add_primary_tag(tag)
+    }
+
+    fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
+        self.primary_tags_storage.add_auto_primary_tag(key)
+    }
+
+    type Input = RatioInput;
+    fn add(&mut self, time: f64, value: RatioInput, mut tags: Vec<Tag>) -> MetricResult<()> {
+        let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
+
+        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, RatioU32>| {
+            let time = (time * TIME_SCALE as f64).round() as Time;
+            let value = value.value()?;
+
+            let mut datapoint = Datapoint {
+                time_offset: 0,
+                value
+            };
+
+            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
+                if time < block_end_time {
+                    return Err(MetricError::InvalidTimeOrder);
+                }
+
+                let time_offset = time - block_start_time;
+                if time_offset < primary_tag.storage.block_duration() {
+                    assert!(time_offset < u32::MAX as u64);
+                    datapoint.time_offset = time_offset as u32;
+
+                    let datapoint_duration = primary_tag.storage.datapoint_duration();
+                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
+                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
+                            last_datapoint.value += value;
+                            return Ok(());
+                        }
+                    }
+
+                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
+                } else {
+                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+                }
+            } else {
+                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+            }
+
+            Ok(())
+        };
+
+        let result = add(&mut primary_tag);
+        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
+        result
+    }
+
+    fn average(&self, query: Query) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingAverage<f64>>;
+        apply_operation!(self, Op, query, |_| Op::from_default(), false)
+    }
+
+    fn sum(&self, query: Query) -> OperationResult {
+        self.operation(query, |_| ratio_sum(), false)
+    }
+
+    fn max(&self, query: Query) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingMax<f64>>;
+        apply_operation!(self, Op, query, |_| Op::from_default(), false)
+    }
+
+    fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
+        let create = |stats: Option<&TimeRangeStatistics<RatioU32>>| {
+            let stats = stats.unwrap();
+            let min = stats.min().value().unwrap_or(0.0);
+            let max = stats.max().value().unwrap_or(1.0);
+            let stats = TimeRangeStatistics::new(stats.count, min, max);
+            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
+        };
+
+        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        apply_operation!(self, Op, query, create, true)
+    }
+
+    fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingAverage<f64>>;
+        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
+    }
+
+    fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        self.operation_in_window(query, duration, |_| ratio_sum(), false)
+    }
+
+    fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingMax<f64>>;
+        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
+    }
+
+    fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
+        let create = |stats: Option<&TimeRangeStatistics<Ratio>>| {
+            let stats = stats.unwrap();
+            let min = stats.min().value().unwrap_or(0.0);
+            let max = stats.max().value().unwrap_or(1.0);
+            let stats = TimeRangeStatistics::new(stats.count, min, max);
+            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
+        };
+
+        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        apply_operation_in_window!(self, Op, query, duration, create, true)
+    }
+
+    fn scheduled(&mut self) {
         self.primary_tags_storage.scheduled();
     }
 }
@@ -362,7 +365,6 @@ impl AddAssign for Ratio {
 
 impl MinMax for Ratio {
     fn min(&self, other: Self) -> Self {
-        // Ratio(self.0.min(other.0), self.1.min(other.1))
         if self.value() < other.value() {
             *self
         } else {
@@ -371,7 +373,6 @@ impl MinMax for Ratio {
     }
 
     fn max(&self, other: Self) -> Self {
-        // Ratio(self.0.max(other.0), self.1.max(other.1))
         if self.value() > other.value() {
             *self
         } else {
@@ -406,7 +407,6 @@ impl AddAssign for RatioU32 {
 
 impl MinMax for RatioU32 {
     fn min(&self, other: Self) -> Self {
-        // RatioU32(self.0.min(other.0), self.1.min(other.1))
         if self.value() < other.value() {
             *self
         } else {
@@ -415,11 +415,19 @@ impl MinMax for RatioU32 {
     }
 
     fn max(&self, other: Self) -> Self {
-        // RatioU32(self.0.max(other.0), self.1.max(other.1))
         if self.value() > other.value() {
             *self
         } else {
             other
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct RatioInput(pub CountInput, pub CountInput);
+
+impl RatioInput {
+    pub fn value(&self) -> MetricResult<RatioU32> {
+        Ok(RatioU32(self.0.value()?, self.1.value()?))
     }
 }

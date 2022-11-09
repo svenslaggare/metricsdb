@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{CountInput, PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{CountInput, GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::metric::{metric_operations, OperationResult};
@@ -33,78 +33,8 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         )
     }
 
-    pub fn stats(&self) {
-        self.primary_tags_storage.stats();
-    }
-
     pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
         self.primary_tags_storage.primary_tags()
-    }
-
-    pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
-        self.primary_tags_storage.add_primary_tag(tag)
-    }
-
-    pub fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
-        self.primary_tags_storage.add_auto_primary_tag(key)
-    }
-
-    pub fn add(&mut self, time: f64, count: CountInput, mut tags: Vec<Tag>) -> MetricResult<()> {
-        let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
-
-        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
-            let time = (time * TIME_SCALE as f64).round() as Time;
-            let value = count.value()?;
-
-            let mut datapoint = Datapoint {
-                time_offset: 0,
-                value
-            };
-
-            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
-                if time < block_end_time {
-                    return Err(MetricError::InvalidTimeOrder);
-                }
-
-                let time_offset = time - block_start_time;
-                if time_offset < primary_tag.storage.block_duration() {
-                    assert!(time_offset < u32::MAX as u64);
-                    datapoint.time_offset = time_offset as u32;
-
-                    let datapoint_duration = primary_tag.storage.datapoint_duration();
-                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
-                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
-                            last_datapoint.value += value;
-                            return Ok(());
-                        }
-                    }
-
-                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
-                } else {
-                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-                }
-            } else {
-                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-            }
-
-            Ok(())
-        };
-
-        let result = add(&mut primary_tag);
-        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
-        result
-    }
-
-    pub fn sum(&self, query: Query) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
-    }
-
-    pub fn average(&self, query: Query) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
     }
 
     fn operation<T: StreamingOperation<u64, f64>, F: Fn() -> T>(&self, query: Query, create_op: F) -> OperationResult {
@@ -148,18 +78,6 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
                 OperationResult::GroupValues(self.primary_tags_storage.apply_group_by(&query, key, apply))
             }
         }
-    }
-
-    pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
-    }
-
-    pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
-        self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
     }
 
     fn operation_in_window<T: StreamingOperation<u64, f64>, F: Fn(f64, f64) -> T>(&self,
@@ -222,8 +140,109 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
             }
         }
     }
+}
 
-    pub fn scheduled(&mut self) {
+impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
+    fn stats(&self) {
+        self.primary_tags_storage.stats();
+    }
+
+    fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
+        self.primary_tags_storage.add_primary_tag(tag)
+    }
+
+    fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()> {
+        self.primary_tags_storage.add_auto_primary_tag(key)
+    }
+
+    type Input = CountInput;
+    fn add(&mut self, time: f64, count: CountInput, mut tags: Vec<Tag>) -> MetricResult<()> {
+        let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
+
+        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
+            let time = (time * TIME_SCALE as f64).round() as Time;
+            let value = count.value()?;
+
+            let mut datapoint = Datapoint {
+                time_offset: 0,
+                value
+            };
+
+            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
+                if time < block_end_time {
+                    return Err(MetricError::InvalidTimeOrder);
+                }
+
+                let time_offset = time - block_start_time;
+                if time_offset < primary_tag.storage.block_duration() {
+                    assert!(time_offset < u32::MAX as u64);
+                    datapoint.time_offset = time_offset as u32;
+
+                    let datapoint_duration = primary_tag.storage.datapoint_duration();
+                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
+                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
+                            last_datapoint.value += value;
+                            return Ok(());
+                        }
+                    }
+
+                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
+                } else {
+                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+                }
+            } else {
+                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+            }
+
+            Ok(())
+        };
+
+        let result = add(&mut primary_tag);
+        self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
+        result
+    }
+
+    fn sum(&self, query: Query) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
+    }
+
+    fn average(&self, query: Query) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
+    }
+
+    fn max(&self, _query: Query) -> OperationResult {
+        todo!()
+    }
+
+    fn percentile(&self, _query: Query, _percentile: i32) -> OperationResult {
+        todo!()
+    }
+
+    fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
+    }
+
+    fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        assert!(query.input_filter.is_none(), "Input filter not supported.");
+        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
+    }
+
+    fn max_in_window(&self, _query: Query, _duration: Duration) -> OperationResult {
+        todo!()
+    }
+
+    fn percentile_in_window(&self, _query: Query, _duration: Duration, _percentile: i32) -> OperationResult {
+        todo!()
+    }
+
+    fn scheduled(&mut self) {
         self.primary_tags_storage.scheduled();
     }
 }

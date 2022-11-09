@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use fnv::{FnvHashMap, FnvHashSet};
 
 use serde::{Serialize, Deserialize};
+use crate::metric::OperationResult;
 
 use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, Tag, TagsFilter};
 use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
@@ -26,6 +28,28 @@ impl CountInput {
             Err(MetricError::TooLargeCount)
         }
     }
+}
+
+pub trait GenericMetric {
+    fn stats(&self);
+
+    fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()>;
+    fn add_auto_primary_tag(&mut self, key: &str) -> MetricResult<()>;
+
+    type Input;
+    fn add(&mut self, time: f64, value: Self::Input, tags: Vec<Tag>) -> MetricResult<()>;
+
+    fn average(&self, query: Query) -> OperationResult;
+    fn sum(&self, query: Query) -> OperationResult;
+    fn max(&self, query: Query) -> OperationResult;
+    fn percentile(&self, query: Query, percentile: i32) -> OperationResult;
+
+    fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult;
+    fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult;
+    fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult;
+    fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult;
+
+    fn scheduled(&mut self);
 }
 
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {

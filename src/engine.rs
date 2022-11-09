@@ -7,12 +7,12 @@ use dashmap::DashMap;
 use fnv::{FnvBuildHasher};
 
 use serde::{Serialize, Deserialize};
-use crate::metric::common::CountInput;
+use crate::metric::common::{CountInput, GenericMetric};
 
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
-use crate::metric::ratio::DefaultRatioMetric;
+use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
 use crate::metric::tags::{PrimaryTag, Tag};
 use crate::model::{MetricError, Query};
 
@@ -284,7 +284,7 @@ impl MetricsEngine {
                 let mut error = None;
 
                 for value in values {
-                    match metric.add(value.time, CountInput(value.numerator), CountInput(value.denominator), value.tags) {
+                    match metric.add(value.time, RatioInput(CountInput(value.numerator), CountInput(value.denominator)), value.tags) {
                         Ok(_) => { num_success += 1; }
                         Err(err) => { error = Some(err); }
                     }

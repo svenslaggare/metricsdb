@@ -6,6 +6,7 @@ use serde::Deserialize;
 use tempfile::tempdir;
 
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use crate::metric::common::GenericMetric;
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::expression::{Function, TransformExpression};
