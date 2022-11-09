@@ -11,6 +11,7 @@ use serde::{Serialize, Deserialize};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
+use crate::metric::ratio::DefaultRatioMetric;
 use crate::metric::tags::{PrimaryTag, Tag};
 use crate::model::{MetricError, Query};
 
@@ -60,10 +61,29 @@ pub struct AddCountValue {
 }
 
 impl AddCountValue {
-    pub fn new(time: f64, value: u16, tags: Vec<Tag>) -> AddCountValue {
+    pub fn new(time: f64, count: u16, tags: Vec<Tag>) -> AddCountValue {
         AddCountValue {
             time,
-            count: value,
+            count,
+            tags
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AddRatioValue {
+    pub time: f64,
+    pub numerator: u16,
+    pub denominator: u16,
+    pub tags: Vec<Tag>
+}
+
+impl AddRatioValue {
+    pub fn new(time: f64, numerator: u16, denominator: u16, tags: Vec<Tag>) -> AddRatioValue {
+        AddRatioValue {
+            time,
+            numerator,
+            denominator,
             tags
         }
     }
@@ -102,6 +122,7 @@ impl MetricsEngine {
             let metric = match metric_type {
                 MetricType::Gauge => Metric::Gauge(DefaultGaugeMetric::from_existing(&base_path.join(&metric_name))?),
                 MetricType::Count => Metric::Count(DefaultCountMetric::from_existing(&base_path.join(&metric_name))?),
+                MetricType::Ratio => Metric::Ratio(DefaultRatioMetric::from_existing(&base_path.join(&metric_name))?)
             };
 
             metrics.insert(metric_name, Arc::new(RwLock::new(metric)));
@@ -174,6 +195,7 @@ impl MetricsEngine {
         match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => metric.add_auto_primary_tag(key)?,
             Metric::Count(metric) => metric.add_auto_primary_tag(key)?,
+            Metric::Ratio(metric) => metric.add_auto_primary_tag(key)?,
         }
 
         Ok(())
@@ -183,6 +205,7 @@ impl MetricsEngine {
         match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
             Metric::Gauge(metric) => metric.add_primary_tag(tag)?,
             Metric::Count(metric) => metric.add_primary_tag(tag)?,
+            Metric::Ratio(metric) => metric.add_primary_tag(tag)?,
         }
 
         Ok(())
@@ -241,56 +264,64 @@ impl MetricsEngine {
     pub fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average(query)),
-            Metric::Count(metric) => Ok(metric.average(query))
+            Metric::Count(metric) => Ok(metric.average(query)),
+            Metric::Ratio(metric) => Ok(metric.average(query))
         }
     }
 
     pub fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum(query)),
-            Metric::Count(metric) => Ok(metric.sum(query))
+            Metric::Count(metric) => Ok(metric.sum(query)),
+            Metric::Ratio(metric) => Ok(metric.sum(query))
         }
     }
 
     pub fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max(query)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
+            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Ratio(metric) => Ok(metric.max(query)),
         }
     }
 
     pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile(query, percentile)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
+            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Ratio(metric) => Ok(metric.percentile(query, percentile)),
         }
     }
 
     pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average_in_window(query, duration)),
-            Metric::Count(metric) => Ok(metric.average_in_window(query, duration))
+            Metric::Count(metric) => Ok(metric.average_in_window(query, duration)),
+            Metric::Ratio(metric) => Ok(metric.average_in_window(query, duration))
         }
     }
 
     pub fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.sum_in_window(query, duration)),
-            Metric::Count(metric) => Ok(metric.sum_in_window(query, duration))
+            Metric::Count(metric) => Ok(metric.sum_in_window(query, duration)),
+            Metric::Ratio(metric) => Ok(metric.sum_in_window(query, duration))
         }
     }
 
     pub fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max_in_window(query, duration)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
+            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Ratio(metric) => Ok(metric.max_in_window(query, duration))
         }
     }
 
     pub fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation)
+            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Ratio(metric) => Ok(metric.percentile_in_window(query, duration, percentile))
         }
     }
 
@@ -298,7 +329,8 @@ impl MetricsEngine {
         for entry in self.metrics.iter() {
             match entry.value().write().unwrap().deref_mut() {
                 Metric::Gauge(metric) => metric.scheduled(),
-                Metric::Count(metric) => metric.scheduled()
+                Metric::Count(metric) => metric.scheduled(),
+                Metric::Ratio(metric) => metric.scheduled()
             }
         }
     }
@@ -318,7 +350,8 @@ pub type ArcMetric = Arc<RwLock<Metric>>;
 
 pub enum Metric {
     Gauge(DefaultGaugeMetric),
-    Count(DefaultCountMetric)
+    Count(DefaultCountMetric),
+    Ratio(DefaultRatioMetric)
 }
 
 impl Metric {
@@ -330,10 +363,15 @@ impl Metric {
         Arc::new(RwLock::new(Metric::Count(metric)))
     }
 
+    pub fn ratio(metric: DefaultRatioMetric) -> ArcMetric {
+        Arc::new(RwLock::new(Metric::Ratio(metric)))
+    }
+
     pub fn metric_type(&self) -> MetricType {
         match self {
             Metric::Gauge(_) => MetricType::Gauge,
-            Metric::Count(_) => MetricType::Count
+            Metric::Count(_) => MetricType::Count,
+            Metric::Ratio(_) => MetricType::Ratio
         }
     }
 }
@@ -341,5 +379,6 @@ impl Metric {
 #[derive(Serialize, Deserialize)]
 pub enum MetricType {
     Gauge,
-    Count
+    Count,
+    Ratio
 }
