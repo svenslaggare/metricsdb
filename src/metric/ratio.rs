@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum};
+use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -16,6 +16,42 @@ pub type DefaultRatioMetric = RatioMetric<FileMetricStorage<RatioU32>>;
 
 pub struct RatioMetric<TStorage: MetricStorage<RatioU32>> {
     primary_tags_storage: PrimaryTagsStorage<TStorage, RatioU32>
+}
+
+macro_rules! apply_operation {
+    ($self:expr, $T:ident, $query:expr, $create:expr, $require_stats:expr) => {
+        {
+           match &$query.input_filter {
+                Some(filter) => {
+                    let filter = filter.clone();
+                    $self.operation($query, |stats| StreamingFilterOperation::<Ratio, $T>::new(filter.clone(), $create(stats)), $require_stats)
+                }
+                None => {
+                    $self.operation($query, |stats| $create(stats), $require_stats)
+                }
+            }
+        }
+    };
+}
+
+macro_rules! apply_operation_in_window {
+    ($self:expr, $T:ident, $query:expr, $duration:expr, $create:expr, $require_stats:expr) => {
+        {
+           match &$query.input_filter {
+                Some(filter) => {
+                    let filter = filter.clone();
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<Ratio, $T>::new(filter.clone(), $create(stats)), $require_stats)
+                }
+                None => {
+                    $self.operation_in_window($query, $duration, |stats| $create(stats), $require_stats)
+                }
+            }
+        }
+    };
+}
+
+fn ratio_sum() -> impl StreamingOperation<Ratio, f64> {
+    StreamingConvert::<Ratio, f64, _, _>::new(StreamingSum::<Ratio>::default(), |x| x.value().unwrap())
 }
 
 impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
@@ -98,15 +134,17 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
     }
 
     pub fn average(&self, query: Query) -> OperationResult {
-        self.operation(query, |_| StreamingRatioValue::<StreamingAverage<_>>::from_default(), false)
+        type Op = StreamingRatioValue<StreamingAverage<f64>>;
+        apply_operation!(self, Op, query, |_| Op::from_default(), false)
     }
 
     pub fn sum(&self, query: Query) -> OperationResult {
-        self.operation(query, |_| StreamingConvert::<Ratio, f64, _, _>::new(StreamingSum::<Ratio>::default(), |x| x.value().unwrap()), false)
+        self.operation(query, |_| ratio_sum(), false)
     }
 
     pub fn max(&self, query: Query) -> OperationResult {
-        self.operation(query, |_| StreamingRatioValue::<StreamingMax<_>>::from_default(), false)
+        type Op = StreamingRatioValue<StreamingMax<f64>>;
+        apply_operation!(self, Op, query, |_| Op::from_default(), false)
     }
 
     pub fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
@@ -118,7 +156,8 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
             StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
         };
 
-        self.operation(query, create, true)
+        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        apply_operation!(self, Op, query, create, true)
     }
 
     fn operation<T: StreamingOperation<Ratio, f64>, F: Fn(Option<&TimeRangeStatistics<RatioU32>>) -> T>(&self,
@@ -182,15 +221,17 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
     }
 
     pub fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        self.operation_in_window(query, duration, |_| StreamingRatioValue::<StreamingAverage<_>>::from_default(), false)
+        type Op = StreamingRatioValue<StreamingAverage<f64>>;
+        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
     }
 
     pub fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        self.operation_in_window(query, duration, |_| StreamingConvert::<Ratio, f64, _, _>::new(StreamingSum::<Ratio>::default(), |x| x.value().unwrap()), false)
+        self.operation_in_window(query, duration, |_| ratio_sum(), false)
     }
 
     pub fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        self.operation_in_window(query, duration, |_| StreamingRatioValue::<StreamingMax<_>>::from_default(), false)
+        type Op = StreamingRatioValue<StreamingMax<f64>>;
+        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
     }
 
     pub fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
@@ -202,7 +243,8 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
             StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
         };
 
-        self.operation_in_window(query, duration, create, true)
+        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        apply_operation_in_window!(self, Op, query, duration, create, true)
     }
 
     fn operation_in_window<T: StreamingOperation<Ratio, f64>, F: Fn(Option<&TimeRangeStatistics<Ratio>>) -> T>(&self,
