@@ -6,6 +6,7 @@ use serde::Deserialize;
 use tempfile::tempdir;
 
 use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::expression::{Function, TransformExpression};
 use crate::metric::gauge::DefaultGaugeMetric;
@@ -172,7 +173,7 @@ fn test_gauge_95th1() {
     }
 
     assert_eq!(
-        Some(0.8005562248849434),
+        Some(0.8005568351587988),
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value()
     );
 }
@@ -401,7 +402,7 @@ fn test_count_sum1() {
     let mut metric = DefaultCountMetric::new(temp_metric_data.path()).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
-        metric.add(SAMPLE_DATA.times[index], 1, Vec::new()).unwrap();
+        metric.add(SAMPLE_DATA.times[index], CountInput(1), Vec::new()).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -428,7 +429,7 @@ fn test_count_primary_tag_sum1() {
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
-        metric.add(SAMPLE_DATA.times[index], 1, tags).unwrap();
+        metric.add(SAMPLE_DATA.times[index], CountInput(1), tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;
@@ -455,7 +456,7 @@ fn test_count_primary_tag_sum2() {
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
-        metric.add(SAMPLE_DATA.times[index], 1, tags).unwrap();
+        metric.add(SAMPLE_DATA.times[index], CountInput(1), tags).unwrap();
 
         if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
             break;

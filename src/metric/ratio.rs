@@ -2,7 +2,7 @@ use std::ops::AddAssign;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{CountInput, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation};
 use crate::metric::{metric_operations, OperationResult};
@@ -87,12 +87,12 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
         self.primary_tags_storage.add_auto_primary_tag(key)
     }
 
-    pub fn add(&mut self, time: f64, numerator: u16, denominator: u16, mut tags: Vec<Tag>) -> MetricResult<()> {
+    pub fn add(&mut self, time: f64, numerator: CountInput, denominator: CountInput, mut tags: Vec<Tag>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, RatioU32>| {
             let time = (time * TIME_SCALE as f64).round() as Time;
-            let value = RatioU32(numerator as u32, denominator as u32);
+            let value = RatioU32(numerator.value()?, denominator.value()?);
 
             let mut datapoint = Datapoint {
                 time_offset: 0,

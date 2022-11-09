@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use fnv::{FnvBuildHasher};
 
 use serde::{Serialize, Deserialize};
+use crate::metric::common::CountInput;
 
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
@@ -56,12 +57,12 @@ impl AddGaugeValue {
 #[derive(Deserialize)]
 pub struct AddCountValue {
     pub time: f64,
-    pub count: u16,
+    pub count: u32,
     pub tags: Vec<Tag>
 }
 
 impl AddCountValue {
-    pub fn new(time: f64, count: u16, tags: Vec<Tag>) -> AddCountValue {
+    pub fn new(time: f64, count: u32, tags: Vec<Tag>) -> AddCountValue {
         AddCountValue {
             time,
             count,
@@ -73,13 +74,13 @@ impl AddCountValue {
 #[derive(Deserialize)]
 pub struct AddRatioValue {
     pub time: f64,
-    pub numerator: u16,
-    pub denominator: u16,
+    pub numerator: u32,
+    pub denominator: u32,
     pub tags: Vec<Tag>
 }
 
 impl AddRatioValue {
-    pub fn new(time: f64, numerator: u16, denominator: u16, tags: Vec<Tag>) -> AddRatioValue {
+    pub fn new(time: f64, numerator: u32, denominator: u32, tags: Vec<Tag>) -> AddRatioValue {
         AddRatioValue {
             time,
             numerator,
@@ -175,6 +176,21 @@ impl MetricsEngine {
         Ok(())
     }
 
+    pub fn add_ratio_metric(&self, name: &str) -> MetricsEngineResult<()> {
+        let _guard = self.create_lock.lock().unwrap();
+        if self.metrics.contains_key(name) {
+            return Err(MetricsEngineError::MetricAlreadyExists);
+        }
+
+        self.metrics.insert(
+            name.to_string(),
+            Metric::ratio(DefaultRatioMetric::new(&self.base_path.join(name))?)
+        );
+
+        self.save_defined_metrics()?;
+        Ok(())
+    }
+
     fn save_defined_metrics(&self) -> MetricsEngineResult<()> {
         let save = || -> std::io::Result<()> {
             let content = serde_json::to_string(
@@ -243,7 +259,32 @@ impl MetricsEngine {
                 let mut error = None;
 
                 for value in values {
-                    match metric.add(value.time, value.count, value.tags) {
+                    match metric.add(value.time, CountInput(value.count), value.tags) {
+                        Ok(_) => { num_success += 1; }
+                        Err(err) => { error = Some(err); }
+                    }
+                }
+
+                if num_success == 0 {
+                    if let Some(err) = error {
+                        return Err(err.into());
+                    }
+                }
+
+                Ok(num_success)
+            }
+            _ => Err(MetricsEngineError::WrongMetricType)
+        }
+    }
+
+    pub fn ratio(&self, metric: &str, values: impl Iterator<Item=AddRatioValue>) -> MetricsEngineResult<usize> {
+        match self.metrics.get_metric(metric)?.write().unwrap().deref_mut() {
+            Metric::Ratio(metric) => {
+                let mut num_success = 0;
+                let mut error = None;
+
+                for value in values {
+                    match metric.add(value.time, CountInput(value.numerator), CountInput(value.denominator), value.tags) {
                         Ok(_) => { num_success += 1; }
                         Err(err) => { error = Some(err); }
                     }

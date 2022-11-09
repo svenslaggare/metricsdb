@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{CountInput, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::metric::{metric_operations, OperationResult};
@@ -49,12 +49,12 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         self.primary_tags_storage.add_auto_primary_tag(key)
     }
 
-    pub fn add(&mut self, time: f64, count: u16, mut tags: Vec<Tag>) -> MetricResult<()> {
+    pub fn add(&mut self, time: f64, count: CountInput, mut tags: Vec<Tag>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
             let time = (time * TIME_SCALE as f64).round() as Time;
-            let value = count as u32;
+            let value = count.value()?;
 
             let mut datapoint = Datapoint {
                 time_offset: 0,

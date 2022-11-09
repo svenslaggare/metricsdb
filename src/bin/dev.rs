@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
+use metricsdb::metric::common::CountInput;
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::expression::{CompareOperation, FilterExpression, Function, TransformExpression};
 use metricsdb::metric::gauge::DefaultGaugeMetric;
@@ -136,7 +137,7 @@ fn main_count() {
         for index in 0..data.times.len() {
             // let tags = Vec::new();
             let tags = vec![tags_list[(index % 2)].to_owned()];
-            metric.add(data.times[index], 1, tags).unwrap();
+            metric.add(data.times[index], CountInput(1), tags).unwrap();
         }
     }
 

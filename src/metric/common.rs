@@ -15,6 +15,19 @@ pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 // pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.2;
 
+#[derive(Debug, Clone, Copy)]
+pub struct CountInput(pub u32);
+
+impl CountInput {
+    pub fn value(&self) -> MetricResult<u32> {
+        if self.0 < (1 << 24u32) {
+            Ok(self.0)
+        } else {
+            Err(MetricError::TooLargeCount)
+        }
+    }
+}
+
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,
     tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>,

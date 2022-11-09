@@ -14,7 +14,7 @@ use axum::{Json, Router};
 use axum::http::StatusCode;
 use axum::routing::{post, put};
 
-use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine, MetricsEngineError};
+use crate::engine::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngine, MetricsEngineError};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
@@ -26,6 +26,9 @@ pub async fn main() {
 
         .route("/metrics/count", post(create_count_metric))
         .route("/metrics/count/:name", put(add_count_metric_value))
+
+        .route("/metrics/ratio", post(create_ratio_metric))
+        .route("/metrics/ratio/:name", put(add_ratio_metric_value))
 
         .route("/metrics/query/:name", post(metric_query))
         .route("/metrics/primary-tag/:name", post(add_primary_tag))
@@ -107,6 +110,11 @@ async fn create_count_metric(State(state): State<Arc<AppState>>, Json(input): Js
     Ok(Json(json!({})).into_response())
 }
 
+async fn create_ratio_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
+    state.metrics_engine.add_ratio_metric(&input.name)?;
+    Ok(Json(json!({})).into_response())
+}
+
 #[derive(Deserialize)]
 struct AddPrimaryTag {
     tag: Tag
@@ -148,6 +156,19 @@ async fn add_count_metric_value(State(state): State<Arc<AppState>>,
                                 Path(name): Path<String>,
                                 Json(metric_values): Json<Vec<AddCountValue>>) -> ServerResult<Response> {
     let num_inserted = state.metrics_engine.count(&name, metric_values.into_iter())?;
+    Ok(
+        Json(
+            json!({
+                "num_inserted": num_inserted
+            })
+        ).into_response()
+    )
+}
+
+async fn add_ratio_metric_value(State(state): State<Arc<AppState>>,
+                                Path(name): Path<String>,
+                                Json(metric_values): Json<Vec<AddRatioValue>>) -> ServerResult<Response> {
+    let num_inserted = state.metrics_engine.ratio(&name, metric_values.into_iter())?;
     Ok(
         Json(
             json!({
