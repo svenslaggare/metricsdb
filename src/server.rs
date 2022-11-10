@@ -269,6 +269,17 @@ async fn metric_query(State(state): State<Arc<AppState>>,
         }
     };
 
+    if let Some(error_message) = value.error_message() {
+        let mut response = Json(
+            json!({
+                "message": error_message
+            })
+        ).into_response();
+        *response.status_mut() = StatusCode::BAD_REQUEST;
+
+        return Ok(response);
+    }
+
     let value = value.as_json();
 
     Ok(

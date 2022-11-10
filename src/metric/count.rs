@@ -203,43 +203,51 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
     }
 
     fn sum(&self, query: Query) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        if query.input_filter.is_some() || query.input_transform.is_some() {
+            return OperationResult::NotSupported;
+        }
+
         self.operation(query, || StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     fn average(&self, query: Query) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        if query.input_filter.is_some() || query.input_transform.is_some() {
+            return OperationResult::NotSupported;
+        }
+
         self.operation(query.clone(), || StreamingTimeAverage::<u64>::new(query.time_range))
     }
 
     fn max(&self, _query: Query) -> OperationResult {
-        unimplemented!()
+        OperationResult::NotSupported
     }
 
     fn percentile(&self, _query: Query, _percentile: i32) -> OperationResult {
-        unimplemented!()
+        OperationResult::NotSupported
     }
 
     fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        if query.input_filter.is_some() || query.input_transform.is_some() {
+            return OperationResult::NotSupported;
+        }
+
         self.operation_in_window(query, duration, |_, _| StreamingConvert::<u64, f64, _, _>::new(StreamingSum::<u64>::default(), |x| x as f64))
     }
 
     fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
-        assert!(query.input_filter.is_none(), "Input filter not supported.");
-        assert!(query.input_transform.is_none(), "Input transform not supported.");
+        if query.input_filter.is_some() || query.input_transform.is_some() {
+            return OperationResult::NotSupported;
+        }
+
         self.operation_in_window(query, duration, |start, end| StreamingTimeAverage::new(TimeRange::new(start, end)))
     }
 
     fn max_in_window(&self, _query: Query, _duration: Duration) -> OperationResult {
-        unimplemented!()
+        OperationResult::NotSupported
     }
 
     fn percentile_in_window(&self, _query: Query, _duration: Duration, _percentile: i32) -> OperationResult {
-        unimplemented!()
+        OperationResult::NotSupported
     }
 
     fn scheduled(&mut self) {

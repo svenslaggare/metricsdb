@@ -92,7 +92,6 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         )
     }
 
-
     pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
         self.primary_tags_storage.primary_tags()
     }

@@ -321,7 +321,7 @@ impl MetricsEngine {
     pub fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max(query)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Count(metric) => Ok(metric.max(query)),
             Metric::Ratio(metric) => Ok(metric.max(query)),
         }
     }
@@ -329,7 +329,7 @@ impl MetricsEngine {
     pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile(query, percentile)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Count(metric) => Ok(metric.percentile(query, percentile)),
             Metric::Ratio(metric) => Ok(metric.percentile(query, percentile)),
         }
     }
@@ -353,7 +353,7 @@ impl MetricsEngine {
     pub fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.max_in_window(query, duration)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Count(metric) => Ok(metric.max_in_window(query, duration)),
             Metric::Ratio(metric) => Ok(metric.max_in_window(query, duration))
         }
     }
@@ -361,7 +361,7 @@ impl MetricsEngine {
     pub fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
-            Metric::Count(_) => Err(MetricsEngineError::UndefinedOperation),
+            Metric::Count(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
             Metric::Ratio(metric) => Ok(metric.percentile_in_window(query, duration, percentile))
         }
     }

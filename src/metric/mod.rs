@@ -13,6 +13,7 @@ use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {
+    NotSupported,
     Value(Option<f64>),
     TimeValues(Vec<(f64, f64)>),
     GroupValues(Vec<(String, Option<f64>)>),
@@ -34,8 +35,16 @@ impl OperationResult {
         }
     }
 
+    pub fn error_message(&self) -> Option<String> {
+        match self {
+            OperationResult::NotSupported => Some("Not supported operation.".to_owned()),
+            _ => None
+        }
+    }
+
     pub fn as_json(&self) -> serde_json::Value {
         match self {
+            OperationResult::NotSupported => json!({ "error_message": "not supported operation" }),
             OperationResult::Value(value) => json!(value),
             OperationResult::TimeValues(values) => json!(values),
             OperationResult::GroupValues(values) => json!(values),
@@ -47,6 +56,7 @@ impl OperationResult {
 impl Display for OperationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            OperationResult::NotSupported => write!(f, "NotSupported"),
             OperationResult::Value(Some(value)) => write!(f, "{}", value),
             OperationResult::Value(None) => write!(f, "None"),
             OperationResult::TimeValues(values) => write!(f, "{:?}", values),
