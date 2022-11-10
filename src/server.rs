@@ -15,6 +15,7 @@ use axum::http::StatusCode;
 use axum::routing::{post, put};
 
 use crate::engine::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngine, MetricsEngineError};
+use crate::metric::expression::{FilterExpression, TransformExpression};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
@@ -201,7 +202,9 @@ struct MetricQuery {
     duration: Option<f64>,
     tags: Option<Vec<Tag>>,
     tags_filter_type: Option<TagsFilterType>,
-    group_by: Option<String>
+    group_by: Option<String>,
+    output_filter: Option<FilterExpression>,
+    output_transform: Option<TransformExpression>
 }
 
 async fn metric_query(State(state): State<Arc<AppState>>,
@@ -221,6 +224,14 @@ async fn metric_query(State(state): State<Arc<AppState>>,
 
     if let Some(group_by) = input_query.group_by {
         query = query.with_group_by(group_by);
+    }
+
+    if let Some(output_filter) = input_query.output_filter {
+        query = query.with_output_filter(output_filter);
+    }
+
+    if let Some(output_transform) = input_query.output_transform {
+        query = query.with_output_transform(output_transform);
     }
 
     let value = match input_query.operation {

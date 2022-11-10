@@ -5,11 +5,13 @@ import numpy as np
 import requests
 from matplotlib import pyplot as plt
 
+
 def main():
     local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
     while True:
-        time_now = time.time()
+        # time_now = time.time()
+        time_now = 1667652117.2578413
 
         # group_by = "core"
         group_by = "host"
@@ -23,6 +25,13 @@ def main():
                 "group_by": group_by,
                 "start": time_now - 3.0 * 3600.0,
                 "end": time_now,
+                "output_filter": {
+                    "Compare": {
+                        "operation": "GreaterThan",
+                        "left": {"Transform": "InputValue"},
+                        "right": {"Transform": {"Value": 0.1}}
+                    }
+                }
             }
         )
         response.raise_for_status()
@@ -43,6 +52,7 @@ def main():
 
         plt.ylim([0.0, 100.0])
         plt.show()
+
 
 if __name__ == "__main__":
     main()

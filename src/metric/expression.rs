@@ -18,7 +18,7 @@ impl ExpressionValue {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum TransformExpression {
     InputValue,
-    Value { value: f64 },
+    Value(f64),
     Arithmetic { operation: ArithmeticOperation, left: Box<TransformExpression>, right: Box<TransformExpression> },
     Function { function: Function, arguments: Vec<TransformExpression> }
 }
@@ -27,7 +27,7 @@ impl TransformExpression {
     pub fn evaluate(&self, input: &ExpressionValue) -> Option<f64> {
         match self {
             TransformExpression::InputValue => input.float(),
-            TransformExpression::Value { value } => Some(*value),
+            TransformExpression::Value(value) => Some(*value),
             TransformExpression::Arithmetic { operation, left, right } => {
                 let left = left.evaluate(input)?;
                 let right = right.evaluate(input)?;
@@ -70,7 +70,7 @@ impl TransformExpression {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum FilterExpression {
-    Transform { expression: TransformExpression },
+    Transform(TransformExpression),
     Compare { operation: CompareOperation, left: Box<FilterExpression>, right: Box<FilterExpression> },
     And { left: Box<FilterExpression>, right: Box<FilterExpression> },
     Or { left: Box<FilterExpression>, right: Box<FilterExpression> }
@@ -78,11 +78,11 @@ pub enum FilterExpression {
 
 impl FilterExpression {
     pub fn input_value() -> FilterExpression {
-        FilterExpression::Transform { expression: TransformExpression::InputValue }
+        FilterExpression::Transform(TransformExpression::InputValue)
     }
 
     pub fn value(value: f64) -> FilterExpression {
-        FilterExpression::Transform { expression: TransformExpression::Value { value } }
+        FilterExpression::Transform(TransformExpression::Value(value))
     }
 
     pub fn evaluate(&self, input: &ExpressionValue) -> Option<bool> {
@@ -91,7 +91,7 @@ impl FilterExpression {
 
     fn evaluate_internal(&self, input: &ExpressionValue) -> Option<FilterExpressionResult> {
         match self {
-            FilterExpression::Transform { expression } => {
+            FilterExpression::Transform(expression) => {
                 Some(FilterExpressionResult::Float(expression.evaluate(input)?))
             }
             FilterExpression::Compare { operation, left, right } => {
@@ -202,8 +202,8 @@ fn test_transform2() {
 fn test_filter1() {
     let expression = FilterExpression::Compare {
         operation: CompareOperation::GreaterThan,
-        left: Box::new(FilterExpression::Transform { expression: TransformExpression::InputValue }),
-        right: Box::new(FilterExpression::Transform { expression: TransformExpression::Value { value: 0.7 } })
+        left: Box::new(FilterExpression::Transform(TransformExpression::InputValue)),
+        right: Box::new(FilterExpression::Transform(TransformExpression::Value(0.7)))
     };
 
     assert_eq!(Some(true), expression.evaluate(&ExpressionValue::Float(0.9)));

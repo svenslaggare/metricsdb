@@ -215,11 +215,11 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
     }
 
     fn max(&self, _query: Query) -> OperationResult {
-        todo!()
+        unimplemented!()
     }
 
     fn percentile(&self, _query: Query, _percentile: i32) -> OperationResult {
-        todo!()
+        unimplemented!()
     }
 
     fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult {
@@ -235,11 +235,11 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
     }
 
     fn max_in_window(&self, _query: Query, _duration: Duration) -> OperationResult {
-        todo!()
+        unimplemented!()
     }
 
     fn percentile_in_window(&self, _query: Query, _duration: Duration, _percentile: i32) -> OperationResult {
-        todo!()
+        unimplemented!()
     }
 
     fn scheduled(&mut self) {
