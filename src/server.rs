@@ -66,7 +66,7 @@ impl IntoResponse for MetricsEngineError {
             MetricsEngineError::FailedToLoadMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load metrics definitions due to: {}", err)),
             MetricsEngineError::FailedToSaveMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save metrics definitions due to: {}", err)),
             MetricsEngineError::MetricAlreadyExists => (StatusCode::BAD_REQUEST, format!("Metrics already exist.")),
-            MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metrics not found.")),
+            MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metric not found.")),
             MetricsEngineError::WrongMetricType => (StatusCode::BAD_REQUEST, format!("Wrong metric type.")),
             MetricsEngineError::UndefinedOperation => (StatusCode::BAD_REQUEST, format!("Operation not defined for current metric type.")),
             MetricsEngineError::InvalidQueryInput => (StatusCode::BAD_REQUEST, format!("Invalid query input.")),
