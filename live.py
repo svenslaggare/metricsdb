@@ -13,9 +13,10 @@ def main():
         time_now = time.time()
         # time_now = 1667652117.2578413
 
-        # metric = "cpu_usage"
+        metric = "cpu_usage"
         # metric = "total_memory"
-        metric = "used_memory"
+        # metric = "used_memory"
+        # metric = "context_switches"
 
         # group_by = "core"
         group_by = "host"

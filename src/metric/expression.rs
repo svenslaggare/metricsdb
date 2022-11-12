@@ -31,13 +31,7 @@ impl TransformExpression {
             TransformExpression::Arithmetic { operation, left, right } => {
                 let left = left.evaluate(input)?;
                 let right = right.evaluate(input)?;
-
-                match operation {
-                    ArithmeticOperation::Add => Some(left + right),
-                    ArithmeticOperation::Subtract => Some(left - right),
-                    ArithmeticOperation::Multiply => Some(left * right),
-                    ArithmeticOperation::Divide => Some(left / right),
-                }
+                Some(operation.apply(left, right))
             }
             TransformExpression::Function { function, arguments } => {
                 let mut transformed_arguments = Vec::new();
@@ -45,24 +39,7 @@ impl TransformExpression {
                     transformed_arguments.push(argument.evaluate(input)?);
                 }
 
-                match function {
-                    Function::Abs if transformed_arguments.len() == 1 => Some(transformed_arguments[0].abs()),
-                    Function::Max if transformed_arguments.len() == 2 => Some(transformed_arguments[0].max(transformed_arguments[1])),
-                    Function::Min if transformed_arguments.len() == 2 => Some(transformed_arguments[0].min(transformed_arguments[1])),
-                    Function::Round if transformed_arguments.len() == 1 => Some(transformed_arguments[0].round()),
-                    Function::Ceil if transformed_arguments.len() == 1 => Some(transformed_arguments[0].ceil()),
-                    Function::Floor if transformed_arguments.len() == 1 => Some(transformed_arguments[0].floor()),
-                    Function::Sqrt if transformed_arguments.len() == 1 && transformed_arguments[0] >= 0.0 => Some(transformed_arguments[0].sqrt()),
-                    Function::Square if transformed_arguments.len() == 1 => Some(transformed_arguments[0] * transformed_arguments[0]),
-                    Function::Power if transformed_arguments.len() == 2 => Some(transformed_arguments[0].powf(transformed_arguments[1])),
-                    Function::Exponential if transformed_arguments.len() == 1 => Some(transformed_arguments[0].exp()),
-                    Function::LogE if transformed_arguments.len() == 1 && transformed_arguments[0] > 0.0 => Some(transformed_arguments[0].ln()),
-                    Function::LogBase if transformed_arguments.len() == 2 && transformed_arguments[0] > 0.0 && transformed_arguments[1] > 0.0 => Some(transformed_arguments[0].log(transformed_arguments[1])),
-                    Function::Sin if transformed_arguments.len() == 1 => Some(transformed_arguments[0].sin()),
-                    Function::Cos if transformed_arguments.len() == 1 => Some(transformed_arguments[0].cos()),
-                    Function::Tan if transformed_arguments.len() == 1 => Some(transformed_arguments[0].tan()),
-                    _ => None
-                }
+                function.apply(&transformed_arguments)
             }
         }
     }
@@ -146,6 +123,17 @@ pub enum ArithmeticOperation {
     Divide
 }
 
+impl ArithmeticOperation {
+    pub fn apply(&self, left: f64, right: f64) -> f64 {
+        match self {
+            ArithmeticOperation::Add => left + right,
+            ArithmeticOperation::Subtract => left - right,
+            ArithmeticOperation::Multiply => left * right,
+            ArithmeticOperation::Divide => left / right
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Function {
     Abs,
@@ -163,6 +151,29 @@ pub enum Function {
     Sin,
     Cos,
     Tan
+}
+
+impl Function {
+    pub fn apply(&self, arguments: &[f64]) -> Option<f64> {
+        match self {
+            Function::Abs if arguments.len() == 1 => Some(arguments[0].abs()),
+            Function::Max if arguments.len() == 2 => Some(arguments[0].max(arguments[1])),
+            Function::Min if arguments.len() == 2 => Some(arguments[0].min(arguments[1])),
+            Function::Round if arguments.len() == 1 => Some(arguments[0].round()),
+            Function::Ceil if arguments.len() == 1 => Some(arguments[0].ceil()),
+            Function::Floor if arguments.len() == 1 => Some(arguments[0].floor()),
+            Function::Sqrt if arguments.len() == 1 && arguments[0] >= 0.0 => Some(arguments[0].sqrt()),
+            Function::Square if arguments.len() == 1 => Some(arguments[0] * arguments[0]),
+            Function::Power if arguments.len() == 2 => Some(arguments[0].powf(arguments[1])),
+            Function::Exponential if arguments.len() == 1 => Some(arguments[0].exp()),
+            Function::LogE if arguments.len() == 1 && arguments[0] > 0.0 => Some(arguments[0].ln()),
+            Function::LogBase if arguments.len() == 2 && arguments[0] > 0.0 && arguments[1] > 0.0 => Some(arguments[0].log(arguments[1])),
+            Function::Sin if arguments.len() == 1 => Some(arguments[0].sin()),
+            Function::Cos if arguments.len() == 1 => Some(arguments[0].cos()),
+            Function::Tan if arguments.len() == 1 => Some(arguments[0].tan()),
+            _ => None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

@@ -3,22 +3,23 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricQuery, MetricQueryExpression, MetricsEngine};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use metricsdb::metric::common::CountInput;
+use metricsdb::metric::common::{CountInput, GenericMetric};
 use metricsdb::metric::count::DefaultCountMetric;
-use metricsdb::metric::expression::{CompareOperation, FilterExpression, Function, TransformExpression};
+use metricsdb::metric::expression::{ArithmeticOperation, CompareOperation, FilterExpression, Function, TransformExpression};
 use metricsdb::metric::gauge::DefaultGaugeMetric;
-use metricsdb::metric::ratio::DefaultRatioMetric;
+use metricsdb::metric::ratio::{DefaultRatioMetric, RatioInput};
 use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
 fn main() {
     // main_gauge();
     // main_count();
-    main_ratio();
+    // main_ratio();
     // main_engine();
-    // main_engine_existing();
+    // main_engine_existing1();
+    main_engine_existing2();
 }
 
 #[derive(Deserialize)]
@@ -220,7 +221,7 @@ fn main_ratio() {
         let _m = TimeMeasurement::new("ratio", TimeMeasurementUnit::Seconds);
         for index in 0..data.times.len() {
             let tags = vec![tags_list[(index % 2)].to_owned()];
-            metric.add(data.times[index], 1, 1 + (index % 3) as u16, tags).unwrap();
+            metric.add(data.times[index], RatioInput(CountInput(1), CountInput(1 + (index % 3) as u32)), tags).unwrap();
         }
     }
 
@@ -262,7 +263,7 @@ fn main_engine() {
         for index in 0..data.times.len() {
             let tags = vec![tags_list[(index % 2)].to_owned()];
             metrics_engine.gauge("cpu", [AddGaugeValue::new(data.times[index], data.values[index] as f64, tags.clone())].into_iter()).unwrap();
-            metrics_engine.count("perf_events", [AddCountValue::new(data.times[index], 1, tags)].into_iter()).unwrap();
+            metrics_engine.count("perf_events", [AddCountValue::new(data.times[index], CountInput(1), tags)].into_iter()).unwrap();
         }
     }
 
@@ -275,7 +276,7 @@ fn main_engine() {
     println!("Count: {}", metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().value().unwrap());
 }
 
-fn main_engine_existing() {
+fn main_engine_existing1() {
     let metrics_engine = MetricsEngine::from_existing(&Path::new("server_storage")).unwrap();
 
     let start_time = 1667652117.2578413 - 10.0 * 60.0;
@@ -325,4 +326,59 @@ fn main_engine_existing() {
         &Path::new("window.json"),
         serde_json::to_string(&windows).unwrap()
     ).unwrap();
+}
+
+fn main_engine_existing2() {
+    let metrics_engine = MetricsEngine::from_existing(&Path::new("server_storage")).unwrap();
+
+    let start_time = 1668190594.1490853 - 10.0 * 60.0;
+    let end_time = 1668190594.1490853;
+
+    let query = Query::new(TimeRange::new(start_time, end_time));
+
+    println!("Used memory: {}", metrics_engine.average("used_memory", query.clone()).unwrap());
+    println!("Total memory: {}", metrics_engine.average("total_memory", query.clone()).unwrap());
+    println!(
+        "Memory usage: {} %",
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Value(100.0)),
+                    right: Box::new(
+                        MetricQueryExpression::Arithmetic {
+                            operation: ArithmeticOperation::Divide,
+                            left: Box::new(MetricQueryExpression::Average { metric: "used_memory".to_string(), query: Query::placeholder() }),
+                            right: Box::new(MetricQueryExpression::Average { metric: "total_memory".to_string(), query: Query::placeholder() }),
+                        }
+                    )
+                }
+            )
+        ).unwrap()
+    );
+
+    println!(
+        "cpu0/cpu1 ratio: {}",
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Divide,
+                    left: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu_usage".to_string(),
+                            query: Query::placeholder().with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]))
+                        }
+                    ),
+                    right: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu_usage".to_string(),
+                            query: Query::placeholder().with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu1")]))
+                        }
+                    )
+                }
+            )
+        ).unwrap()
+    );
 }

@@ -60,6 +60,10 @@ impl Query {
         }
     }
 
+    pub fn placeholder() -> Query {
+        Query::new(TimeRange::new(0.0, 1.0))
+    }
+
     pub fn with_tags_filter(self, tags: TagsFilter) -> Query {
         let mut new = self;
         new.tags_filter = tags;

@@ -10,11 +10,12 @@ use serde::{Serialize, Deserialize};
 use crate::metric::common::{CountInput, GenericMetric};
 
 use crate::metric::count::DefaultCountMetric;
+use crate::metric::expression::{ArithmeticOperation, Function};
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
 use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
 use crate::metric::tags::{PrimaryTag, Tag};
-use crate::model::{MetricError, Query};
+use crate::model::{MetricError, Query, TimeRange};
 
 pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
 
@@ -37,7 +38,7 @@ impl From<MetricError> for MetricsEngineError {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AddGaugeValue {
     pub time: f64,
     pub value: f64,
@@ -54,15 +55,15 @@ impl AddGaugeValue {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AddCountValue {
     pub time: f64,
-    pub count: u32,
+    pub count: CountInput,
     pub tags: Vec<Tag>
 }
 
 impl AddCountValue {
-    pub fn new(time: f64, count: u32, tags: Vec<Tag>) -> AddCountValue {
+    pub fn new(time: f64, count: CountInput, tags: Vec<Tag>) -> AddCountValue {
         AddCountValue {
             time,
             count,
@@ -71,7 +72,7 @@ impl AddCountValue {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AddRatioValue {
     pub time: f64,
     pub numerator: u32,
@@ -259,7 +260,7 @@ impl MetricsEngine {
                 let mut error = None;
 
                 for value in values {
-                    match metric.add(value.time, CountInput(value.count), value.tags) {
+                    match metric.add(value.time, value.count, value.tags) {
                         Ok(_) => { num_success += 1; }
                         Err(err) => { error = Some(err); }
                     }
@@ -334,6 +335,59 @@ impl MetricsEngine {
         }
     }
 
+    pub fn query(&self, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
+        fn evaluate(this: &MetricsEngine, time_range: TimeRange, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
+            match expression {
+                MetricQueryExpression::Average { metric, mut query } => {
+                    query.time_range = time_range;
+                    this.average(&metric, query)
+                }
+                MetricQueryExpression::Sum { metric, mut query } => {
+                    query.time_range = time_range;
+                    this.sum(&metric, query)
+                }
+                MetricQueryExpression::Max { metric, mut query } => {
+                    query.time_range = time_range;
+                    this.max(&metric, query)
+                }
+                MetricQueryExpression::Percentile { metric, mut query, percentile } => {
+                    query.time_range = time_range;
+                    this.percentile(&metric, query, percentile)
+                }
+                MetricQueryExpression::Value(value) => {
+                    Ok(OperationResult::Value(Some(value)))
+                }
+                MetricQueryExpression::Arithmetic { operation, left, right } => {
+                    let left = evaluate(this, time_range, *left)?;
+                    let right = evaluate(this, time_range, *right)?;
+                    Ok(OperationResult::Value(option_op(left.value(), right.value(), |x, y| operation.apply(x, y))))
+                }
+                MetricQueryExpression::Function { function, arguments } => {
+                    let mut transformed_arguments = Vec::new();
+                    for argument in arguments {
+                        transformed_arguments.push(
+                            evaluate(this, time_range, argument)?
+                                .value()
+                                .ok_or_else(|| MetricsEngineError::UndefinedOperation)?
+                        );
+                    }
+
+                    Ok(OperationResult::Value(function.apply(&transformed_arguments)))
+                }
+            }
+        }
+
+        fn option_op(left: Option<f64>, right: Option<f64>, op: impl Fn(f64, f64) -> f64) -> Option<f64> {
+            if let (Some(left), Some(right)) = (left, right) {
+                Some(op(left, right))
+            } else {
+                None
+            }
+        }
+
+        evaluate(self, query.time_range, query.expression)
+    }
+
     pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average_in_window(query, duration)),
@@ -375,6 +429,30 @@ impl MetricsEngine {
             }
         }
     }
+}
+
+pub struct MetricQuery {
+    pub time_range: TimeRange,
+    pub expression: MetricQueryExpression
+}
+
+impl MetricQuery {
+    pub fn new(time_range: TimeRange, expression: MetricQueryExpression) -> MetricQuery {
+        MetricQuery {
+            time_range,
+            expression
+        }
+    }
+}
+
+pub enum MetricQueryExpression {
+    Average { metric: String, query: Query },
+    Sum { metric: String, query: Query },
+    Max { metric: String, query: Query },
+    Percentile { metric: String,  query: Query, percentile: i32 },
+    Value(f64),
+    Arithmetic { operation: ArithmeticOperation, left: Box<MetricQueryExpression>, right: Box<MetricQueryExpression> },
+    Function { function: Function, arguments: Vec<MetricQueryExpression> }
 }
 
 trait MetricsHashMapExt {

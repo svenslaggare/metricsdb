@@ -194,7 +194,7 @@ enum TagsFilterType {
 }
 
 #[derive(Deserialize)]
-struct MetricQuery {
+struct InputMetricQuery {
     start: f64,
     end: f64,
     operation: MetricOperation,
@@ -209,7 +209,7 @@ struct MetricQuery {
 
 async fn metric_query(State(state): State<Arc<AppState>>,
                       Path(name): Path<String>,
-                      Json(input_query): Json<MetricQuery>) -> ServerResult<Response> {
+                      Json(input_query): Json<InputMetricQuery>) -> ServerResult<Response> {
     let mut query = Query::new(TimeRange::new(input_query.start, input_query.end));
     if let Some(tags) = input_query.tags {
         match input_query.tags_filter_type.unwrap_or(TagsFilterType::And) {

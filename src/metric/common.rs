@@ -17,7 +17,7 @@ pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
 // pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CountInput(pub u32);
 
 impl CountInput {
