@@ -201,8 +201,7 @@ struct InputMetricQuery {
     operation: MetricOperation,
     percentile: Option<i32>,
     duration: Option<f64>,
-    tags: Option<Vec<Tag>>,
-    tags_filter_type: Option<TagsFilterType>,
+    tags_filter: Option<TagsFilter>,
     group_by: Option<String>,
     output_filter: Option<FilterExpression>,
     output_transform: Option<TransformExpression>
@@ -212,15 +211,8 @@ async fn metric_query(State(state): State<Arc<AppState>>,
                       Path(name): Path<String>,
                       Json(input_query): Json<InputMetricQuery>) -> ServerResult<Response> {
     let mut query = Query::new(TimeRange::new(input_query.start, input_query.end));
-    if let Some(tags) = input_query.tags {
-        match input_query.tags_filter_type.unwrap_or(TagsFilterType::And) {
-            TagsFilterType::And => {
-                query = query.with_tags_filter(TagsFilter::And(tags));
-            }
-            TagsFilterType::Or => {
-                query = query.with_tags_filter(TagsFilter::Or(tags));
-            }
-        }
+    if let Some(tags_filter) = input_query.tags_filter {
+        query = query.with_tags_filter(tags_filter);
     }
 
     if let Some(group_by) = input_query.group_by {

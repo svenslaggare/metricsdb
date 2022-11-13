@@ -73,7 +73,7 @@ impl PrimaryTag {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum TagsFilter {
     None,
     And(Vec<Tag>),

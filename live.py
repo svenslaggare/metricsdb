@@ -10,8 +10,8 @@ def main():
     local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
     while True:
-        time_now = time.time()
-        # time_now = 1667652117.2578413
+        # time_now = time.time()
+        time_now = 1667652117.2578413
 
         metric = "cpu_usage"
         # metric = "total_memory"
@@ -26,10 +26,13 @@ def main():
             "http://localhost:9090/metrics/query/{}".format(metric),
             json={
                 "operation": "Average",
-                "duration": 10.0,
-                "group_by": group_by,
                 "start": time_now - 3.0 * 3600.0,
                 "end": time_now,
+                "duration": 10.0,
+                "group_by": group_by,
+                "tags_filter": {
+                    "And": ["core:cpu15"]
+                }
                 # "output_filter": {
                 #     "Compare": {
                 #         "operation": "GreaterThan",
