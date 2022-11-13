@@ -166,7 +166,7 @@ impl TagsFilter {
             TagsFilter::None => TagsFilter::And(tags),
             TagsFilter::And(mut current) => {
                 current.append(&mut tags);
-                TagsFilter::Or(current)
+                TagsFilter::And(current)
             }
             TagsFilter::Or(current) => {
                 TagsFilter::OrAnd(current, tags)
