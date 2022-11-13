@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::json;
@@ -14,7 +14,8 @@ use axum::{Json, Router};
 use axum::http::StatusCode;
 use axum::routing::{post, put};
 
-use crate::engine::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngine, MetricsEngineError};
+use crate::engine::MetricsEngine;
+use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError};
 use crate::metric::expression::{FilterExpression, TransformExpression};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};

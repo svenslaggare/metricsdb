@@ -4,93 +4,22 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use dashmap::DashMap;
-use fnv::{FnvBuildHasher};
+use fnv::FnvBuildHasher;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+
+use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError, MetricsEngineResult};
+
+use crate::engine::querying;
+use crate::engine::querying::MetricQuery;
 use crate::metric::common::{CountInput, GenericMetric};
 
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
-use crate::metric::{OperationResult};
+use crate::metric::OperationResult;
 use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
-use crate::metric::tags::{PrimaryTag, Tag};
-use crate::model::{MetricError, Query};
-use crate::query_engine;
-use crate::query_engine::MetricQuery;
-
-pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
-
-#[derive(Debug)]
-pub enum MetricsEngineError {
-    FailedToCreateBaseDir(std::io::Error),
-    FailedToLoadMetricDefinitions(std::io::Error),
-    FailedToSaveMetricDefinitions(std::io::Error),
-    MetricAlreadyExists,
-    MetricNotFound,
-    WrongMetricType,
-    UnexpectedResult,
-    InvalidQueryInput,
-    Metric(MetricError)
-}
-
-impl From<MetricError> for MetricsEngineError {
-    fn from(other: MetricError) -> Self {
-        MetricsEngineError::Metric(other)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AddGaugeValue {
-    pub time: f64,
-    pub value: f64,
-    pub tags: Vec<Tag>
-}
-
-impl AddGaugeValue {
-    pub fn new(time: f64, value: f64, tags: Vec<Tag>) -> AddGaugeValue {
-        AddGaugeValue {
-            time,
-            value,
-            tags
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AddCountValue {
-    pub time: f64,
-    pub count: CountInput,
-    pub tags: Vec<Tag>
-}
-
-impl AddCountValue {
-    pub fn new(time: f64, count: CountInput, tags: Vec<Tag>) -> AddCountValue {
-        AddCountValue {
-            time,
-            count,
-            tags
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AddRatioValue {
-    pub time: f64,
-    pub numerator: u32,
-    pub denominator: u32,
-    pub tags: Vec<Tag>
-}
-
-impl AddRatioValue {
-    pub fn new(time: f64, numerator: u32, denominator: u32, tags: Vec<Tag>) -> AddRatioValue {
-        AddRatioValue {
-            time,
-            numerator,
-            denominator,
-            tags
-        }
-    }
-}
+use crate::metric::tags::{PrimaryTag};
+use crate::model::Query;
 
 pub struct MetricsEngine {
     base_path: PathBuf,
@@ -337,7 +266,7 @@ impl MetricsEngine {
     }
 
     pub fn query(&self, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
-        query_engine::query(self, query)
+        querying::query(self, query)
     }
 
     pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
@@ -373,7 +302,7 @@ impl MetricsEngine {
     }
 
     pub fn query_in_window(&self, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
-        query_engine::query_in_window(self, query, duration)
+        querying::query_in_window(self, query, duration)
     }
 
     pub fn scheduled(&self) {

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use crate::engine::{MetricsEngine, MetricsEngineError, MetricsEngineResult};
+use crate::engine::engine::MetricsEngine;
+use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
 use crate::metric::{OperationResult, TimeValues};
 use crate::metric::expression::{ArithmeticOperation, Function};
 use crate::model::{Query, TimeRange};

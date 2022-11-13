@@ -5,7 +5,8 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use tempfile::tempdir;
 
-use crate::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use crate::engine::MetricsEngine;
+use crate::engine::io::{AddCountValue, AddGaugeValue};
 use crate::metric::common::GenericMetric;
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;

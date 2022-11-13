@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use metricsdb::engine::{AddCountValue, AddGaugeValue, MetricsEngine};
+use metricsdb::engine::engine::MetricsEngine;
+use metricsdb::engine::io::{AddCountValue, AddGaugeValue};
+use metricsdb::engine::querying::{MetricQuery, MetricQueryExpression};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
 use metricsdb::metric::common::{CountInput, GenericMetric};
 use metricsdb::metric::count::DefaultCountMetric;
@@ -12,7 +14,6 @@ use metricsdb::metric::gauge::DefaultGaugeMetric;
 use metricsdb::metric::ratio::{DefaultRatioMetric, RatioInput};
 use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
-use metricsdb::query_engine::{MetricQuery, MetricQueryExpression};
 
 fn main() {
     // main_gauge();

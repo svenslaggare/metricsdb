@@ -6,10 +6,9 @@ use fnv::FnvHashMap;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use metricsdb::engine::AddGaugeValue;
-use metricsdb::engine::AddCountValue;
 use metricsdb::metric::common::CountInput;
 use metricsdb::metric::tags::Tag;
+use metricsdb::engine::io::{AddGaugeValue, AddCountValue};
 
 struct AgentConfig {
     base_url: String,
