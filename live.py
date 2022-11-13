@@ -30,9 +30,9 @@ def main():
                 "end": time_now,
                 "duration": 10.0,
                 "group_by": group_by,
-                "tags_filter": {
-                    "And": ["core:cpu15"]
-                }
+                # "tags_filter": {
+                #     "And": ["core:cpu15"]
+                # }
                 # "output_filter": {
                 #     "Compare": {
                 #         "operation": "GreaterThan",

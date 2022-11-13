@@ -62,7 +62,7 @@ pub type ServerResult<T> = Result<T, MetricsEngineError>;
 
 impl IntoResponse for MetricsEngineError {
     fn into_response(self) -> Response {
-        let (error_code, error_message) = match self {
+        let (status_code, error_message) = match self {
             MetricsEngineError::FailedToCreateBaseDir(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create base dir due to: {}", err)),
             MetricsEngineError::FailedToLoadMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load metrics definitions due to: {}", err)),
             MetricsEngineError::FailedToSaveMetricDefinitions(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save metrics definitions due to: {}", err)),
@@ -74,14 +74,14 @@ impl IntoResponse for MetricsEngineError {
             MetricsEngineError::Metric(err) => (StatusCode::BAD_REQUEST, format!("Metric error: {:?}", err))
         };
 
-        let mut response = Json(
-            json!({
-                "message": error_message
-            })
-        ).into_response();
-        *response.status_mut() = error_code;
-
-        response
+        with_response_code(
+            Json(
+                json!({
+                    "message": error_message
+                })
+            ).into_response(),
+            status_code
+        )
     }
 }
 
@@ -263,14 +263,14 @@ async fn metric_query(State(state): State<Arc<AppState>>,
     };
 
     if let Some(error_message) = value.error_message() {
-        let mut response = Json(
-            json!({
-                "message": error_message
-            })
-        ).into_response();
-        *response.status_mut() = StatusCode::BAD_REQUEST;
-
-        return Ok(response);
+        return Ok(with_response_code(
+            Json(
+                json!({
+                    "message": error_message
+                })
+            ).into_response(),
+            StatusCode::BAD_REQUEST
+        ));
     }
 
     let value = value.as_json();
@@ -282,4 +282,9 @@ async fn metric_query(State(state): State<Arc<AppState>>,
             })
         ).into_response()
     )
+}
+
+fn with_response_code(mut response: Response, code: StatusCode) -> Response {
+    *response.status_mut() = code;
+    response
 }

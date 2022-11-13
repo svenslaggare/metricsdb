@@ -20,8 +20,8 @@ fn main() {
     // main_count();
     // main_ratio();
     // main_engine();
-    // main_engine_existing1();
-    main_engine_existing2();
+    main_engine_existing1();
+    // main_engine_existing2();
 }
 
 #[derive(Deserialize)]
@@ -301,7 +301,8 @@ fn main_engine_existing1() {
 
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by("host".to_owned());
-    // let query = query.with_tags_filter(TagsFilter::Or(vec!["core:cpu0".to_owned(), "core:cpu1".to_owned(), "core:cpu2".to_owned()]));
+    let query = query.with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]));
+    // let query = query.with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0")]));
 
     println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
 
