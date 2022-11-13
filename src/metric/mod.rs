@@ -11,13 +11,15 @@ pub mod expression;
 use std::fmt::{Display};
 use serde_json::json;
 
+pub type TimeValues = Vec<(f64, Option<f64>)>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {
     NotSupported,
     Value(Option<f64>),
-    TimeValues(Vec<(f64, f64)>),
+    TimeValues(TimeValues),
     GroupValues(Vec<(String, Option<f64>)>),
-    GroupTimeValues(Vec<(String, Vec<(f64, f64)>)>)
+    GroupTimeValues(Vec<(String, Vec<(f64, Option<f64>)>)>)
 }
 
 impl OperationResult {
@@ -28,7 +30,7 @@ impl OperationResult {
         }
     }
 
-    pub fn time_values(self) -> Option<Vec<(f64, f64)>> {
+    pub fn time_values(self) -> Option<TimeValues> {
         match self {
             OperationResult::TimeValues(values) => Some(values),
             _ => None

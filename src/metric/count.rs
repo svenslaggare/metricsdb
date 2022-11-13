@@ -127,7 +127,8 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
             metric_operations::extract_operations_in_windows(
                 metric_operations::merge_windowing(primary_tags_windowing),
-                |value| query.apply_output_transform(value?)
+                |value| query.apply_output_transform(value?),
+                query.remove_empty_datapoints
             )
         };
 

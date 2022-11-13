@@ -44,7 +44,8 @@ pub struct Query {
     pub input_transform: Option<TransformExpression>,
     pub output_filter: Option<FilterExpression>,
     pub output_transform: Option<TransformExpression>,
-    pub group_by: Option<String>
+    pub group_by: Option<String>,
+    pub remove_empty_datapoints: bool
 }
 
 impl Query {
@@ -56,7 +57,8 @@ impl Query {
             input_transform: None,
             output_filter: None,
             output_transform: None,
-            group_by: None
+            group_by: None,
+            remove_empty_datapoints: true
         }
     }
 

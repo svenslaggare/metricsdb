@@ -279,13 +279,16 @@ pub fn extract_operations_in_windows<
     T: StreamingOperation<TInput, TOutput>,
     F: Fn(Option<TOutput>) -> Option<TOutput>,
     TInput, TOutput
->(windowing: MetricWindowing<T>, transform_output: F) -> Vec<(f64, TOutput)> {
+>(windowing: MetricWindowing<T>, transform_output: F, remove_empty: bool) -> Vec<(f64, Option<TOutput>)> {
     windowing.windows
         .iter()
         .enumerate()
-        .filter(|(_, operation)| operation.is_some())
-        .map(|(start, operation)| transform_output(operation.as_ref().unwrap().value()).map(|value| (windowing.get_timestamp(start), value)))
-        .flatten()
+        .filter(|(_, operation)| operation.is_some() || !remove_empty)
+         .map(|(start, operation)| (
+             windowing.get_timestamp(start),
+             operation.as_ref().map(|operation| transform_output(operation.value())).flatten()
+         ))
+        .filter(|(_, value)| value.is_some() || !remove_empty)
         .collect()
 }
 

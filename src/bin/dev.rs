@@ -306,11 +306,12 @@ fn main_engine_existing1() {
     let windows = metrics_engine.average_in_window(
         "cpu_usage",
         Query::new(TimeRange::new(start_time, end_time))
-            .with_output_filter(FilterExpression::Compare {
-                operation: CompareOperation::GreaterThan,
-                left: Box::new(FilterExpression::input_value()),
-                right: Box::new(FilterExpression::value(0.2))
-            }),
+            // .with_output_filter(FilterExpression::Compare {
+            //     operation: CompareOperation::GreaterThan,
+            //     left: Box::new(FilterExpression::input_value()),
+            //     right: Box::new(FilterExpression::value(0.2))
+            // })
+        ,
         Duration::from_secs_f64(10.0)
     ).unwrap();
 
@@ -381,4 +382,35 @@ fn main_engine_existing2() {
             )
         ).unwrap()
     );
+
+    let windows = metrics_engine.query_in_window(
+        MetricQuery::new(
+            TimeRange::new(start_time, end_time),
+            MetricQueryExpression::Arithmetic {
+                operation: ArithmeticOperation::Multiply,
+                left: Box::new(MetricQueryExpression::Value(100.0)),
+                right: Box::new(
+                    MetricQueryExpression::Arithmetic {
+                        operation: ArithmeticOperation::Divide,
+                        left: Box::new(MetricQueryExpression::Average { metric: "used_memory".to_string(), query: Query::placeholder() }),
+                        right: Box::new(MetricQueryExpression::Average { metric: "total_memory".to_string(), query: Query::placeholder() }),
+                    }
+                )
+            }
+            // MetricQueryExpression::Function {
+            //     function: Function::Min,
+            //     arguments: vec![
+            //         MetricQueryExpression::Average { metric: "used_memory".to_string(), query: Query::placeholder() },
+            //         MetricQueryExpression::Average { metric: "total_memory".to_string(), query: Query::placeholder() }
+            //     ]
+            // }
+        ),
+        Duration::from_secs_f64(10.0)
+    ).unwrap();
+
+    let windows = windows.time_values().unwrap();
+    std::fs::write(
+        &Path::new("window.json"),
+        serde_json::to_string(&windows).unwrap()
+    ).unwrap();
 }

@@ -68,7 +68,7 @@ impl IntoResponse for MetricsEngineError {
             MetricsEngineError::MetricAlreadyExists => (StatusCode::BAD_REQUEST, format!("Metrics already exist.")),
             MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metric not found.")),
             MetricsEngineError::WrongMetricType => (StatusCode::BAD_REQUEST, format!("Wrong metric type.")),
-            MetricsEngineError::UndefinedOperation => (StatusCode::BAD_REQUEST, format!("Operation not defined for current metric type.")),
+            MetricsEngineError::UnexpectedResult => (StatusCode::BAD_REQUEST, format!("Unexpected result.")),
             MetricsEngineError::InvalidQueryInput => (StatusCode::BAD_REQUEST, format!("Invalid query input.")),
             MetricsEngineError::Metric(err) => (StatusCode::BAD_REQUEST, format!("Metric error: {:?}", err))
         };
