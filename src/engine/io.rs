@@ -23,6 +23,8 @@ impl From<MetricError> for MetricsEngineError {
     }
 }
 
+pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
+
 #[derive(Serialize, Deserialize)]
 pub struct AddGaugeValue {
     pub time: f64,
@@ -57,6 +59,14 @@ impl AddCountValue {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AddRatioValue {
+    pub time: f64,
+    pub numerator: u32,
+    pub denominator: u32,
+    pub tags: Vec<Tag>
+}
+
 impl AddRatioValue {
     pub fn new(time: f64, numerator: u32, denominator: u32, tags: Vec<Tag>) -> AddRatioValue {
         AddRatioValue {
@@ -66,14 +76,4 @@ impl AddRatioValue {
             tags
         }
     }
-}
-
-pub type MetricsEngineResult<T> = Result<T, MetricsEngineError>;
-
-#[derive(Serialize, Deserialize)]
-pub struct AddRatioValue {
-    pub time: f64,
-    pub numerator: u32,
-    pub denominator: u32,
-    pub tags: Vec<Tag>
 }
