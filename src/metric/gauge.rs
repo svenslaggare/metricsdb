@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::metric::common::{GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
+use crate::metric::operations::{StreamingApproxPercentile, StreamingApproxPercentileTDigest, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -96,6 +96,14 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         self.primary_tags_storage.primary_tags()
     }
 
+    pub fn percentile_digest(&self, query: Query, percentile: i32) -> OperationResult {
+        let create = |_: Option<&TimeRangeStatistics<f32>>| {
+            StreamingApproxPercentileTDigest::new(percentile)
+        };
+
+        apply_operation!(self, StreamingApproxPercentileTDigest, query, create, false)
+    }
+
     fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> OperationResult {
         apply_operation!(self, T, query, |_| T::default(), false)
     }
@@ -160,7 +168,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         }
     }
 
-    pub fn simple_operation_in_window<T: StreamingOperation<f64> + Default>(&self, query: Query, duration: Duration) -> OperationResult {
+    fn simple_operation_in_window<T: StreamingOperation<f64> + Default>(&self, query: Query, duration: Duration) -> OperationResult {
         apply_operation_in_window!(self, T, query, duration, |_| T::default(), false)
     }
 

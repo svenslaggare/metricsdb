@@ -68,6 +68,10 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(&Tags
                             for datapoint in &mut iterator {
                                 apply(&tags, block_start_time + datapoint.time_offset as Time, datapoint);
                             }
+
+                            if iterator.outside_time_range {
+                                outside_time_range = true;
+                            }
                         }
                     }
                 }
@@ -100,7 +104,6 @@ pub fn visit_datapoints_in_time_range<TStorage: MetricStorage<E>, F: FnMut(&Tags
     }
 }
 
-
 pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy + MinMax>(storage: &TStorage,
                                                                                          start_time: Time,
                                                                                          end_time: Time,
@@ -121,6 +124,40 @@ pub fn determine_statistics_for_time_range<TStorage: MetricStorage<E>, E: Copy +
     );
 
     stats
+}
+
+pub fn approx_datapoint_count_for_time_range<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
+                                                                                  start_time: Time,
+                                                                                  end_time: Time,
+                                                                                  tags_filter: SecondaryTagsFilter,
+                                                                                  start_block_index: usize) -> usize {
+    let mut count = 0;
+    for block_index in start_block_index..storage.len() {
+        let (block_start_time, block_end_time) = storage.block_time_range(block_index).unwrap();
+        if block_end_time >= start_time {
+            let mut outside_time_range = false;
+
+            if let Some(iterator) = storage.block_datapoints(block_index) {
+                for (tags, datapoints) in iterator {
+                    if tags_filter.accept(tags) {
+                        count += datapoints.len();
+
+                        if let Some(last_datapoint) = datapoints.last() {
+                            if (block_start_time + last_datapoint.time_offset as Time) > end_time {
+                                outside_time_range = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if outside_time_range {
+                break;
+            }
+        }
+    }
+
+    count
 }
 
 #[derive(Debug)]

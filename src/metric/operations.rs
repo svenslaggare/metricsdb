@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use tdigest::TDigest;
 
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
 use crate::metric::metric_operations::TimeRangeStatistics;
@@ -339,7 +340,7 @@ impl StreamingHistogram {
     }
 }
 
-impl StreamingOperation<f64, f64> for StreamingHistogram {
+impl StreamingOperation<f64> for StreamingHistogram {
     fn add(&mut self, value: f64) {
         self.add_with_count(value, 1);
     }
@@ -387,7 +388,7 @@ impl StreamingApproxPercentile {
     }
 }
 
-impl StreamingOperation<f64, f64> for StreamingApproxPercentile {
+impl StreamingOperation<f64> for StreamingApproxPercentile {
     fn add(&mut self, value: f64) {
         self.histogram.add(value);
     }
@@ -399,6 +400,73 @@ impl StreamingOperation<f64, f64> for StreamingApproxPercentile {
     fn merge(&mut self, other: Self) {
         assert_eq!(self.percentile, other.percentile);
         self.histogram.merge(other.histogram);
+    }
+}
+
+pub struct StreamingTDigest {
+    digest: TDigest,
+    buffer: Vec<f64>,
+    max_buffer_before_merge: usize
+}
+
+impl StreamingTDigest {
+    pub fn new(max_size: usize) -> StreamingTDigest {
+        StreamingTDigest {
+            digest: TDigest::new_with_size(max_size),
+            buffer: Vec::new(),
+            max_buffer_before_merge: 1024
+        }
+    }
+
+    fn digest(&self) -> TDigest {
+        self.digest.merge_unsorted(self.buffer.clone())
+    }
+}
+
+impl StreamingOperation<f64> for StreamingTDigest {
+    fn add(&mut self, value: f64) {
+        self.buffer.push(value);
+        if self.buffer.len() >= self.max_buffer_before_merge {
+            self.digest = self.digest.merge_unsorted(std::mem::take(&mut self.buffer));
+        }
+    }
+
+    fn value(&self) -> Option<f64> {
+        None
+    }
+
+    fn merge(&mut self, other: Self) {
+        let other_digest = other.digest.merge_unsorted(other.buffer);
+        self.digest = TDigest::merge_digests(vec![std::mem::take(&mut self.digest), other_digest]);
+    }
+}
+
+pub struct StreamingApproxPercentileTDigest {
+    digest: StreamingTDigest,
+    percentile: i32
+}
+
+impl StreamingApproxPercentileTDigest {
+    pub fn new(percentile: i32) -> StreamingApproxPercentileTDigest {
+        StreamingApproxPercentileTDigest {
+            digest: StreamingTDigest::new(150),
+            percentile
+        }
+    }
+}
+
+impl StreamingOperation<f64> for StreamingApproxPercentileTDigest {
+    fn add(&mut self, value: f64) {
+        self.digest.add(value);
+    }
+
+    fn value(&self) -> Option<f64> {
+        Some(self.digest.digest().estimate_quantile(self.percentile as f64 / 100.0))
+    }
+
+    fn merge(&mut self, other: Self) {
+        assert_eq!(self.percentile, other.percentile);
+        self.digest.merge(other.digest);
     }
 }
 

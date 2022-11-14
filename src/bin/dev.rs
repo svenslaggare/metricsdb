@@ -301,10 +301,10 @@ fn main_engine_existing1() {
 
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by("host".to_owned());
-    let query = query.with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]));
+    // let query = query.with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]));
     // let query = query.with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0")]));
 
-    println!("Avg: {}", metrics_engine.average("cpu_usage", query).unwrap());
+    println!("Avg: {}", metrics_engine.average("cpu_usage", query.clone()).unwrap());
 
     let windows = metrics_engine.average_in_window(
         "cpu_usage",
@@ -318,18 +318,14 @@ fn main_engine_existing1() {
         Duration::from_secs_f64(10.0)
     ).unwrap();
 
-    // let windows = metrics_engine.percentile_in_window(
-    //     "cpu_usage",
-    //     Query::new(TimeRange::new(start_time, end_time)),
-    //     Duration::from_secs_f64(10.0),
-    //     95
-    // ).unwrap();
-
     let windows = windows.time_values().unwrap();
     std::fs::write(
         &Path::new("window.json"),
         serde_json::to_string(&windows).unwrap()
     ).unwrap();
+
+    println!("95th: {}", metrics_engine.percentile("cpu_usage", query.clone(), 95).unwrap());
+    println!("95th: {}", metrics_engine.percentile_digest("cpu_usage", query.clone(), 95).unwrap());
 }
 
 fn main_engine_existing2() {
