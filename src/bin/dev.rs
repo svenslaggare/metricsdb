@@ -325,7 +325,6 @@ fn main_engine_existing1() {
     ).unwrap();
 
     println!("95th: {}", metrics_engine.percentile("cpu_usage", query.clone(), 95).unwrap());
-    println!("95th: {}", metrics_engine.percentile_digest("cpu_usage", query.clone(), 95).unwrap());
 }
 
 fn main_engine_existing2() {

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::metric::common::{CountInput, GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin};
+use crate::metric::operations::{StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin, StreamingApproxPercentileTDigest};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -305,15 +305,22 @@ impl<TStorage: MetricStorage<RatioU32>> GenericMetric for RatioMetric<TStorage> 
     }
 
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<RatioU32>>| {
-            let stats = stats.unwrap();
-            let min = stats.min().value().unwrap_or(0.0);
-            let max = stats.max().value().unwrap_or(1.0);
-            let stats = TimeRangeStatistics::new(stats.count, min, max);
-            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
+        // let create = |stats: Option<&TimeRangeStatistics<RatioU32>>| {
+        //     let stats = stats.unwrap();
+        //     let min = stats.min().value().unwrap_or(0.0);
+        //     let max = stats.max().value().unwrap_or(1.0);
+        //     let stats = TimeRangeStatistics::new(stats.count, min, max);
+        //     StreamingRatioValue::new(StreamingApproxPercentileHistogram::from_stats(&stats, percentile))
+        // };
+        //
+        // type Op = StreamingRatioValue<StreamingApproxPercentileHistogram>;
+        // apply_operation!(self, Op, query, create, true)
+
+        let create = |_: Option<&TimeRangeStatistics<RatioU32>>| {
+            StreamingRatioValue::new(StreamingApproxPercentileTDigest::new(percentile))
         };
 
-        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        type Op = StreamingRatioValue<StreamingApproxPercentileTDigest>;
         apply_operation!(self, Op, query, create, true)
     }
 
@@ -337,15 +344,22 @@ impl<TStorage: MetricStorage<RatioU32>> GenericMetric for RatioMetric<TStorage> 
     }
 
     fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<Ratio>>| {
-            let stats = stats.unwrap();
-            let min = stats.min().value().unwrap_or(0.0);
-            let max = stats.max().value().unwrap_or(1.0);
-            let stats = TimeRangeStatistics::new(stats.count, min, max);
-            StreamingRatioValue::new(StreamingApproxPercentile::from_stats(&stats, percentile))
+        // let create = |stats: Option<&TimeRangeStatistics<Ratio>>| {
+        //     let stats = stats.unwrap();
+        //     let min = stats.min().value().unwrap_or(0.0);
+        //     let max = stats.max().value().unwrap_or(1.0);
+        //     let stats = TimeRangeStatistics::new(stats.count, min, max);
+        //     StreamingRatioValue::new(StreamingApproxPercentileHistogram::from_stats(&stats, percentile))
+        // };
+        //
+        // type Op = StreamingRatioValue<StreamingApproxPercentileHistogram>;
+        // apply_operation_in_window!(self, Op, query, duration, create, true)
+
+        let create = |_: Option<&TimeRangeStatistics<Ratio>>| {
+            StreamingRatioValue::new(StreamingApproxPercentileTDigest::new(percentile))
         };
 
-        type Op = StreamingRatioValue<StreamingApproxPercentile>;
+        type Op = StreamingRatioValue<StreamingApproxPercentileTDigest>;
         apply_operation_in_window!(self, Op, query, duration, create, true)
     }
 

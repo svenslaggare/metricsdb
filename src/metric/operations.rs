@@ -370,25 +370,25 @@ impl StreamingOperation<f64> for StreamingHistogram {
     }
 }
 
-pub struct StreamingApproxPercentile {
+pub struct StreamingApproxPercentileHistogram {
     histogram: StreamingHistogram,
     percentile: i32
 }
 
-impl StreamingApproxPercentile {
-    pub fn new(min: f64, max: f64, num_buckets: usize, percentile: i32) -> StreamingApproxPercentile {
-        StreamingApproxPercentile {
+impl StreamingApproxPercentileHistogram {
+    pub fn new(min: f64, max: f64, num_buckets: usize, percentile: i32) -> StreamingApproxPercentileHistogram {
+        StreamingApproxPercentileHistogram {
             histogram: StreamingHistogram::new(min, max, num_buckets),
             percentile
         }
     }
 
-    pub fn from_stats(stats: &TimeRangeStatistics<f64>, percentile: i32) -> StreamingApproxPercentile {
-        StreamingApproxPercentile::new(stats.min(), stats.max(), StreamingHistogram::auto_num_buckets(stats.count), percentile)
+    pub fn from_stats(stats: &TimeRangeStatistics<f64>, percentile: i32) -> StreamingApproxPercentileHistogram {
+        StreamingApproxPercentileHistogram::new(stats.min(), stats.max(), StreamingHistogram::auto_num_buckets(stats.count), percentile)
     }
 }
 
-impl StreamingOperation<f64> for StreamingApproxPercentile {
+impl StreamingOperation<f64> for StreamingApproxPercentileHistogram {
     fn add(&mut self, value: f64) {
         self.histogram.add(value);
     }
@@ -621,7 +621,7 @@ fn test_streaming_approx_percentile1() {
     use rand::prelude::SliceRandom;
     use rand::thread_rng;
 
-    let mut streaming = StreamingApproxPercentile::new(1.0, 1001.0, 50, 99);
+    let mut streaming = StreamingApproxPercentileHistogram::new(1.0, 1001.0, 50, 99);
     let mut values = (1..1001).collect::<Vec<_>>();
     values.shuffle(&mut thread_rng());
     for value in values {
@@ -629,4 +629,19 @@ fn test_streaming_approx_percentile1() {
     }
 
     assert_eq!(Some(991.0), streaming.value());
+}
+
+#[test]
+fn test_streaming_approx_percentile2() {
+    use rand::prelude::SliceRandom;
+    use rand::thread_rng;
+
+    let mut streaming = StreamingApproxPercentileTDigest::new(99);
+    let mut values = (1..1001).collect::<Vec<_>>();
+    values.shuffle(&mut thread_rng());
+    for value in values {
+        streaming.add(value as f64);
+    }
+
+    assert_eq!(Some(990.5), streaming.value());
 }

@@ -218,7 +218,8 @@ fn test_gauge_95th1() {
     }
 
     assert_eq!(
-        Some(0.8005568351587988),
+        // Some(0.8005568351587988),
+        Some(0.8006393909454346),
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value()
     );
 }
@@ -431,7 +432,8 @@ fn test_gauge_primary_tag_95th1() {
     }
 
     assert_abs_diff_eq!(
-        0.8006655905325116,
+        // 0.8006655905325116,
+        0.8005379579702949,
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value().unwrap_or(0.0),
         epsilon = 1e-5
     );

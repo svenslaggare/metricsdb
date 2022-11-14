@@ -273,14 +273,6 @@ impl MetricsEngine {
         }
     }
 
-    pub fn percentile_digest(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
-        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
-            Metric::Gauge(metric) => Ok(metric.percentile_digest(query, percentile)),
-            Metric::Count(_) => Ok(OperationResult::NotSupported),
-            Metric::Ratio(_) => Ok(OperationResult::NotSupported),
-        }
-    }
-
     pub fn query(&self, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
         querying::query(self, query)
     }

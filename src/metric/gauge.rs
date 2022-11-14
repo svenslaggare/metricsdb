@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::metric::common::{GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingApproxPercentileTDigest, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
+use crate::metric::operations::{StreamingApproxPercentileTDigest, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -94,14 +94,6 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
     pub fn primary_tags(&self) -> impl Iterator<Item=&PrimaryTag> {
         self.primary_tags_storage.primary_tags()
-    }
-
-    pub fn percentile_digest(&self, query: Query, percentile: i32) -> OperationResult {
-        let create = |_: Option<&TimeRangeStatistics<f32>>| {
-            StreamingApproxPercentileTDigest::new(percentile)
-        };
-
-        apply_operation!(self, StreamingApproxPercentileTDigest, query, create, false)
     }
 
     fn simple_operation<T: StreamingOperation<f64> + Default>(&self, query: Query) -> OperationResult {
@@ -339,13 +331,19 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
     }
 
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<f32>>| {
-            let stats = stats.unwrap();
-            let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
-            StreamingApproxPercentile::from_stats(&stats, percentile)
+        // let create = |stats: Option<&TimeRangeStatistics<f32>>| {
+        //     let stats = stats.unwrap();
+        //     let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
+        //     StreamingApproxPercentileHistogram::from_stats(&stats, percentile)
+        // };
+        //
+        // apply_operation!(self, StreamingApproxPercentileHistogram, query, create, true)
+
+        let create = |_: Option<&TimeRangeStatistics<f32>>| {
+            StreamingApproxPercentileTDigest::new(percentile)
         };
 
-        apply_operation!(self, StreamingApproxPercentile, query, create, true)
+        apply_operation!(self, StreamingApproxPercentileTDigest, query, create, false)
     }
 
     fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult {
@@ -365,13 +363,19 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
     }
 
     fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
-        let create = |stats: Option<&TimeRangeStatistics<f64>>| {
-            let stats = stats.unwrap();
-            let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
-            StreamingApproxPercentile::from_stats(&stats, percentile)
+        // let create = |stats: Option<&TimeRangeStatistics<f64>>| {
+        //     let stats = stats.unwrap();
+        //     let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
+        //     StreamingApproxPercentileHistogram::from_stats(&stats, percentile)
+        // };
+        //
+        // apply_operation_in_window!(self, StreamingApproxPercentileHistogram, query, duration, create, true)
+
+        let create = |_: Option<&TimeRangeStatistics<f64>>| {
+            StreamingApproxPercentileTDigest::new(percentile)
         };
 
-        apply_operation_in_window!(self, StreamingApproxPercentile, query, duration, create, true)
+        apply_operation_in_window!(self, StreamingApproxPercentileTDigest, query, duration, create, false)
     }
 
     fn scheduled(&mut self) {
