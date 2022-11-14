@@ -24,6 +24,7 @@ pub enum MetricQueryExpression {
     Average { metric: String, query: Query },
     Sum { metric: String, query: Query },
     Max { metric: String, query: Query },
+    Min { metric: String, query: Query },
     Percentile { metric: String,  query: Query, percentile: i32 },
     Value(f64),
     Arithmetic { operation: ArithmeticOperation, left: Box<MetricQueryExpression>, right: Box<MetricQueryExpression> },
@@ -44,6 +45,10 @@ pub fn query(this: &MetricsEngine, query: MetricQuery) -> MetricsEngineResult<Op
             MetricQueryExpression::Max { metric, mut query } => {
                 query.time_range = time_range;
                 this.max(&metric, query)
+            }
+            MetricQueryExpression::Min { metric, mut query } => {
+                query.time_range = time_range;
+                this.min(&metric, query)
             }
             MetricQueryExpression::Percentile { metric, mut query, percentile } => {
                 query.time_range = time_range;
@@ -92,6 +97,11 @@ pub fn query_in_window(this: &MetricsEngine, query: MetricQuery, duration: Durat
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
                 this.max_in_window(&metric, query, duration)
+            }
+            MetricQueryExpression::Min { metric, mut query } => {
+                query.time_range = time_range;
+                query.remove_empty_datapoints = false;
+                this.min_in_window(&metric, query, duration)
             }
             MetricQueryExpression::Percentile { metric, mut query, percentile } => {
                 query.time_range = time_range;

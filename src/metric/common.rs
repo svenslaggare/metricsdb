@@ -42,11 +42,13 @@ pub trait GenericMetric {
     fn average(&self, query: Query) -> OperationResult;
     fn sum(&self, query: Query) -> OperationResult;
     fn max(&self, query: Query) -> OperationResult;
+    fn min(&self, query: Query) -> OperationResult;
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult;
 
     fn average_in_window(&self, query: Query, duration: Duration) -> OperationResult;
     fn sum_in_window(&self, query: Query, duration: Duration) -> OperationResult;
     fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult;
+    fn min_in_window(&self, query: Query, duration: Duration) -> OperationResult;
     fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult;
 
     fn scheduled(&mut self);

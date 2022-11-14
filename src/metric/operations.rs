@@ -233,6 +233,44 @@ impl<T> Default for StreamingMax<T> {
     }
 }
 
+pub struct StreamingMin<T> {
+    min: Option<T>
+}
+
+impl<T> StreamingMin<T> {
+    pub fn new() -> StreamingMin<T> {
+        StreamingMin {
+            min: None
+        }
+    }
+}
+
+impl<T: MinMax + Copy> StreamingOperation<T> for StreamingMin<T> {
+    fn add(&mut self, value: T) {
+        if let Some(min) = self.min.as_mut() {
+            *min = min.min(value);
+        } else {
+            self.min = Some(value);
+        }
+    }
+
+    fn value(&self) -> Option<T> {
+        self.min
+    }
+
+    fn merge(&mut self, other: Self) {
+        if let Some(value) = other.min {
+            self.add(value);
+        }
+    }
+}
+
+impl<T> Default for StreamingMin<T> {
+    fn default() -> Self {
+        StreamingMin::new()
+    }
+}
+
 pub struct StreamingHistogram {
     buckets: Vec<usize>,
     total_count: usize,

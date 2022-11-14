@@ -223,6 +223,10 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
         OperationResult::NotSupported
     }
 
+    fn min(&self, _query: Query) -> OperationResult {
+        OperationResult::NotSupported
+    }
+
     fn percentile(&self, _query: Query, _percentile: i32) -> OperationResult {
         OperationResult::NotSupported
     }
@@ -244,6 +248,10 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
     }
 
     fn max_in_window(&self, _query: Query, _duration: Duration) -> OperationResult {
+        OperationResult::NotSupported
+    }
+
+    fn min_in_window(&self, _query: Query, _duration: Duration) -> OperationResult {
         OperationResult::NotSupported
     }
 

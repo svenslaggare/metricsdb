@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::metric::common::{CountInput, GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation};
+use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -299,6 +299,11 @@ impl<TStorage: MetricStorage<RatioU32>> GenericMetric for RatioMetric<TStorage> 
         apply_operation!(self, Op, query, |_| Op::from_default(), false)
     }
 
+    fn min(&self, query: Query) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingMin<f64>>;
+        apply_operation!(self, Op, query, |_| Op::from_default(), false)
+    }
+
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
         let create = |stats: Option<&TimeRangeStatistics<RatioU32>>| {
             let stats = stats.unwrap();
@@ -323,6 +328,11 @@ impl<TStorage: MetricStorage<RatioU32>> GenericMetric for RatioMetric<TStorage> 
 
     fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         type Op = StreamingRatioValue<StreamingMax<f64>>;
+        apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
+    }
+
+    fn min_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        type Op = StreamingRatioValue<StreamingMin<f64>>;
         apply_operation_in_window!(self, Op, query, duration, |_| Op::from_default(), false)
     }
 

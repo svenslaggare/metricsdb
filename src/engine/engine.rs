@@ -257,6 +257,14 @@ impl MetricsEngine {
         }
     }
 
+    pub fn min(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
+            Metric::Gauge(metric) => Ok(metric.min(query)),
+            Metric::Count(metric) => Ok(metric.min(query)),
+            Metric::Ratio(metric) => Ok(metric.min(query)),
+        }
+    }
+
     pub fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.percentile(query, percentile)),
@@ -290,6 +298,14 @@ impl MetricsEngine {
             Metric::Gauge(metric) => Ok(metric.max_in_window(query, duration)),
             Metric::Count(metric) => Ok(metric.max_in_window(query, duration)),
             Metric::Ratio(metric) => Ok(metric.max_in_window(query, duration))
+        }
+    }
+
+    pub fn min_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        match self.metrics.get_metric(metric)?.read().unwrap().deref() {
+            Metric::Gauge(metric) => Ok(metric.min_in_window(query, duration)),
+            Metric::Count(metric) => Ok(metric.min_in_window(query, duration)),
+            Metric::Ratio(metric) => Ok(metric.min_in_window(query, duration))
         }
     }
 

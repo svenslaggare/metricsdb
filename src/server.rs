@@ -185,6 +185,7 @@ enum MetricOperation {
     Average,
     Sum,
     Max,
+    Min,
     Percentile
 }
 
@@ -247,6 +248,13 @@ async fn metric_query(State(state): State<Arc<AppState>>,
                 state.metrics_engine.max_in_window(&name, query, Duration::from_secs_f64(duration))?
             } else {
                 state.metrics_engine.max(&name, query)?
+            }
+        },
+        MetricOperation::Min => {
+            if let Some(duration) = input_query.duration {
+                state.metrics_engine.min_in_window(&name, query, Duration::from_secs_f64(duration))?
+            } else {
+                state.metrics_engine.min(&name, query)?
             }
         },
         MetricOperation::Percentile => {

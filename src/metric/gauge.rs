@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::metric::common::{GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingOperation, StreamingSum, StreamingTransformOperation};
+use crate::metric::operations::{StreamingApproxPercentile, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
@@ -326,6 +326,10 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
         self.simple_operation::<StreamingMax<f64>>(query)
     }
 
+    fn min(&self, query: Query) -> OperationResult {
+        self.simple_operation::<StreamingMin<f64>>(query)
+    }
+
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
         let create = |stats: Option<&TimeRangeStatistics<f32>>| {
             let stats = stats.unwrap();
@@ -346,6 +350,10 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
 
     fn max_in_window(&self, query: Query, duration: Duration) -> OperationResult {
         self.simple_operation_in_window::<StreamingMax<f64>>(query, duration)
+    }
+
+    fn min_in_window(&self, query: Query, duration: Duration) -> OperationResult {
+        self.simple_operation_in_window::<StreamingMin<f64>>(query, duration)
     }
 
     fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
