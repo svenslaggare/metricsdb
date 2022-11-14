@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use approx::assert_abs_diff_eq;
 use lazy_static::lazy_static;
@@ -13,6 +14,7 @@ use crate::metric::count::DefaultCountMetric;
 use crate::metric::expression::{Function, TransformExpression};
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
+use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
@@ -131,6 +133,47 @@ fn test_gauge_average4() {
             Query::new(TimeRange::new(start_time, end_time))
                 .with_input_transform(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
         ).value()
+    );
+}
+
+#[test]
+fn test_gauge_average5() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(vec![
+            (1654596000.0, Some(0.7810451562759174)),
+            (1654596500.0, Some(0.798498850655144)),
+            (1654597000.0, Some(0.7795522142153012)),
+            (1654597500.0, Some(0.7289274156650085)),
+            (1654598000.0, Some(0.6592202344433357)),
+            (1654598500.0, Some(0.5868039118632926)),
+            (1654599000.0, Some(0.5303680305548479)),
+            (1654599500.0, Some(0.5027029820642929)),
+            (1654600000.0, Some(0.5116486969877181)),
+            (1654600500.0, Some(0.5541196308760059)),
+            (1654601000.0, Some(0.6199090911265585)),
+            (1654601500.0, Some(0.6936228376297285)),
+            (1654602000.0, Some(0.7563260559193605)),
+            (1654602500.0, Some(0.7929676963694573))
+        ]),
+        metric.average_in_window(
+            Query::new(TimeRange::new(start_time, end_time)),
+            Duration::from_secs_f64(500.0)
+        ).time_values()
     );
 }
 
@@ -471,6 +514,65 @@ fn test_count_primary_tag_sum2() {
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
         ).value()
+    );
+}
+
+#[test]
+fn test_ratio_sum1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut metric = DefaultRatioMetric::new(temp_metric_data.path()).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(
+            SAMPLE_DATA.times[index],
+            RatioInput(CountInput(if SAMPLE_DATA.values[index] > 0.7 {1} else {0}), CountInput(1)),
+            Vec::new()
+        ).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(0.4689526633778615),
+        metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
+    );
+}
+
+#[test]
+fn test_ratio_primary_tag_sum1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
+
+    let mut metric = DefaultRatioMetric::new(temp_metric_data.path()).unwrap();
+
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metric.add(
+            SAMPLE_DATA.times[index],
+            RatioInput(CountInput(if SAMPLE_DATA.values[index] > 0.7 {1} else {0}), CountInput(1)),
+            tags
+        ).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(0.4689526633778615),
+        metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
 
