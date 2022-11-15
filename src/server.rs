@@ -16,7 +16,9 @@ use axum::routing::{post, put};
 
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError};
+use crate::engine::querying::{MetricQuery, MetricQueryExpression};
 use crate::metric::expression::{FilterExpression, TransformExpression};
+use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Query, TimeRange};
 
@@ -33,6 +35,8 @@ pub async fn main() {
         .route("/metrics/ratio/:name", put(add_ratio_metric_value))
 
         .route("/metrics/query/:name", post(metric_query))
+        .route("/metrics/advanced-query", post(advanced_metric_query))
+
         .route("/metrics/primary-tag/:name", post(add_primary_tag))
         .route("/metrics/auto-primary-tag/:name", post(add_auto_primary_tag))
     ;
@@ -190,18 +194,11 @@ enum MetricOperation {
 }
 
 #[derive(Deserialize)]
-enum TagsFilterType {
-    And,
-    Or
-}
-
-#[derive(Deserialize)]
 struct InputMetricQuery {
-    start: f64,
-    end: f64,
+    time_range: TimeRange,
+    duration: Option<f64>,
     operation: MetricOperation,
     percentile: Option<i32>,
-    duration: Option<f64>,
     tags_filter: Option<TagsFilter>,
     group_by: Option<String>,
     output_filter: Option<FilterExpression>,
@@ -211,7 +208,7 @@ struct InputMetricQuery {
 async fn metric_query(State(state): State<Arc<AppState>>,
                       Path(name): Path<String>,
                       Json(input_query): Json<InputMetricQuery>) -> ServerResult<Response> {
-    let mut query = Query::new(TimeRange::new(input_query.start, input_query.end));
+    let mut query = Query::new(input_query.time_range);
     if let Some(tags_filter) = input_query.tags_filter {
         query = query.with_tags_filter(tags_filter);
     }
@@ -270,6 +267,30 @@ async fn metric_query(State(state): State<Arc<AppState>>,
         }
     };
 
+    operation_result_response(value)
+}
+
+#[derive(Deserialize)]
+struct InputAdvancedMetricQuery {
+    time_range: TimeRange,
+    duration: Option<f64>,
+    expression: MetricQueryExpression
+}
+
+async fn advanced_metric_query(State(state): State<Arc<AppState>>,
+                               Json(input_query): Json<InputAdvancedMetricQuery>) -> ServerResult<Response> {
+    let query = MetricQuery::new(input_query.time_range, input_query.expression);
+
+    let value = if let Some(duration) = input_query.duration {
+        state.metrics_engine.query_in_window(query, Duration::from_secs_f64(duration))?
+    } else {
+        state.metrics_engine.query(query)?
+    };
+
+    operation_result_response(value)
+}
+
+fn operation_result_response(value: OperationResult) -> ServerResult<Response> {
     if let Some(error_message) = value.error_message() {
         return Ok(with_response_code(
             Json(

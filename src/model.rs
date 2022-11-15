@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
 use crate::metric::tags::TagsFilter;
 use crate::storage::memory_file::MemoryFileError;
@@ -12,7 +13,7 @@ pub struct Datapoint<T: Copy> {
     pub value: T
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub struct TimeRange {
     pub start: f64,
     pub end: f64
@@ -36,7 +37,8 @@ impl TimeRange {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Query {
     pub time_range: TimeRange,
     pub tags_filter: TagsFilter,
@@ -113,6 +115,12 @@ impl Query {
             Some(operation) => operation.evaluate(&ExpressionValue::Float(value)),
             None => Some(value)
         }
+    }
+}
+
+impl Default for Query {
+    fn default() -> Self {
+        Query::placeholder()
     }
 }
 

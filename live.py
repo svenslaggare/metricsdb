@@ -11,37 +11,121 @@ def main():
 
     while True:
         # time_now = time.time()
-        time_now = 1667652117.2578413
+        # time_now = 1667652117.2578413
+        time_now = 1668190594.1490853
 
-        metric = "cpu_usage"
+        # metric = "cpu_usage"
         # metric = "total_memory"
-        # metric = "used_memory"
+        metric = "used_memory"
         # metric = "context_switches"
 
         # group_by = "core"
-        group_by = "host"
-        # group_by = None
+        # group_by = "host"
+        group_by = None
+
+        # response = requests.post(
+        #     "http://localhost:9090/metrics/query/{}".format(metric),
+        #     json={
+        #         "time_range": {
+        #             "start": time_now - 3.0 * 3600.0,
+        #             "end": time_now
+        #         },
+        #         "duration": 10.0,
+        #         "operation": "Average",
+        #         "group_by": group_by,
+        #         # "tags_filter": { "And": ["core:cpu15"] }
+        #         # "output_filter": {
+        #         #     "Compare": {
+        #         #         "operation": "GreaterThan",
+        #         #         "left": {"Transform": "InputValue"},
+        #         #         "right": {"Transform": {"Value": 0.1}}
+        #         #     }
+        #         # }
+        #     }
+        # )
+
+        # response = requests.post(
+        #     "http://localhost:9090/metrics/advanced-query",
+        #     json={
+        #         "time_range": {
+        #             "start": time_now - 3.0 * 3600.0,
+        #             "end": time_now
+        #         },
+        #         "duration": 10.0,
+        #         "expression": {
+        #             "Average": {
+        #                 "metric": "cpu_usage",
+        #                 "query": {
+        #                     "tags_filter": { "And": ["core:cpu15"] }
+        #                 }
+        #             }
+        #         }
+        #     }
+        # )
 
         response = requests.post(
-            "http://localhost:9090/metrics/query/{}".format(metric),
+            "http://localhost:9090/metrics/advanced-query",
             json={
-                "operation": "Average",
-                "start": time_now - 3.0 * 3600.0,
-                "end": time_now,
+                "time_range": {
+                    "start": time_now - 3.0 * 3600.0,
+                    "end": time_now
+                },
                 "duration": 10.0,
-                "group_by": group_by,
-                # "tags_filter": {
-                #     "And": ["core:cpu15"]
-                # }
-                # "output_filter": {
-                #     "Compare": {
-                #         "operation": "GreaterThan",
-                #         "left": {"Transform": "InputValue"},
-                #         "right": {"Transform": {"Value": 0.1}}
-                #     }
-                # }
+                "expression": {
+                    "Arithmetic": {
+                        "operation": "Multiply",
+                        "left": {
+                            "Value": 100.0
+                        },
+                        "right": {
+                            "Arithmetic": {
+                                "operation": "Divide",
+                                "left": {
+                                    "Average": {
+                                        "metric": "used_memory",
+                                        "query": {}
+                                    }
+                                },
+                                "right": {
+                                    "Average": {
+                                        "metric": "total_memory",
+                                        "query": {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         )
+
+        # response = requests.post(
+        #     "http://localhost:9090/metrics/advanced-query",
+        #     json={
+        #         "time_range": {
+        #             "start": time_now - 3.0 * 3600.0,
+        #             "end": time_now
+        #         },
+        #         "duration": 10.0,
+        #         "expression": {
+        #             "Arithmetic": {
+        #                 "operation": "Multiply",
+        #                 "left": {
+        #                     "Value": 100.0
+        #                 },
+        #                 "right": {
+        #                     "Average": {
+        #                         "metric": "cpu_usage",
+        #                         "query": {
+        #                             "tags_filter": { "And": ["core:cpu15"] }
+        #                         }
+        #                     }
+        #                 }
+        #             }
+        #         }
+        #     }
+        # )
+
         response.raise_for_status()
         response_data = response.json()
 

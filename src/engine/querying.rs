@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use serde::Deserialize;
+
 use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
 use crate::metric::{OperationResult, TimeValues};
@@ -20,6 +22,7 @@ impl MetricQuery {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
 pub enum MetricQueryExpression {
     Average { metric: String, query: Query },
     Sum { metric: String, query: Query },
