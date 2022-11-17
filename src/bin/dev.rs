@@ -20,8 +20,8 @@ fn main() {
     // main_count();
     // main_ratio();
     // main_engine();
-    main_engine_existing1();
-    // main_engine_existing2();
+    // main_engine_existing1();
+    main_engine_existing2();
 }
 
 #[derive(Deserialize)]
@@ -334,6 +334,71 @@ fn main_engine_existing2() {
     let end_time = 1668190594.1490853;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
+
+    // println!(
+    //     "CPU usage: {}",
+    //     metrics_engine.query(
+    //         MetricQuery::new(
+    //             TimeRange::new(start_time, end_time),
+    //             MetricQueryExpression::Arithmetic {
+    //                 operation: ArithmeticOperation::Multiply,
+    //                 left: Box::new(MetricQueryExpression::Value(100.0)),
+    //                 right: Box::new(
+    //                     MetricQueryExpression::Average {
+    //                         metric: "cpu_usage".to_string(),
+    //                         query: Query::placeholder().with_group_by("core".to_owned())
+    //                     }
+    //                 )
+    //             }
+    //         )
+    //     ).unwrap()
+    // );
+
+    // println!(
+    //     "CPU usage ratio: {}",
+    //     metrics_engine.query(
+    //         MetricQuery::new(
+    //             TimeRange::new(start_time, end_time),
+    //             MetricQueryExpression::Arithmetic {
+    //                 operation: ArithmeticOperation::Divide,
+    //                 left: Box::new(
+    //                     MetricQueryExpression::Average {
+    //                         metric: "cpu_usage".to_string(),
+    //                         query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu1"), Tag::from_ref("core", "cpu2")]))
+    //                     }
+    //                 ),
+    //                 right: Box::new(
+    //                     MetricQueryExpression::Average {
+    //                         metric: "cpu_usage".to_string(),
+    //                         query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0"), Tag::from_ref("core", "cpu1")]))
+    //                     }
+    //                 )
+    //             }
+    //         )
+    //     ).unwrap()
+    // );
+
+    println!(
+        "CPU usage max: {}",
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average {
+                            metric: "cpu_usage".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu1"), Tag::from_ref("core", "cpu2")]))
+                        },
+                        MetricQueryExpression::Average {
+                            metric: "cpu_usage".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0"), Tag::from_ref("core", "cpu1")]))
+                        }
+                    ]
+                }
+            )
+        ).unwrap()
+    );
 
     println!("Used memory: {}", metrics_engine.average("used_memory", query.clone()).unwrap());
     println!("Total memory: {}", metrics_engine.average("total_memory", query.clone()).unwrap());

@@ -1,10 +1,11 @@
 use std::time::Duration;
+use fnv::{FnvHashMap, FnvHashSet};
 
 use serde::Deserialize;
 
 use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
-use crate::metric::{OperationResult, TimeValues};
+use crate::metric::{GroupValues, OperationResult, TimeValues};
 use crate::metric::expression::{ArithmeticOperation, Function};
 use crate::model::{Query, TimeRange};
 
@@ -63,19 +64,93 @@ pub fn query(this: &MetricsEngine, query: MetricQuery) -> MetricsEngineResult<Op
             MetricQueryExpression::Arithmetic { operation, left, right } => {
                 let left = evaluate(this, time_range, *left)?;
                 let right = evaluate(this, time_range, *right)?;
-                Ok(OperationResult::Value(option_op(left.value(), right.value(), |x, y| operation.apply(x, y))))
+
+                match (left, right) {
+                    (OperationResult::Value(left), OperationResult::GroupValues(right)) => {
+                        let transformed_values = right
+                            .into_iter()
+                            .map(|(right_group, right_value)| (right_group, option_op(left, right_value, |x, y| operation.apply(x, y))))
+                            .collect();
+                        Ok(OperationResult::GroupValues(transformed_values))
+                    }
+                    (OperationResult::GroupValues(left), OperationResult::Value(right)) => {
+                        let transformed_values = left
+                            .into_iter()
+                            .map(|(left_group, left_value)| (left_group, option_op(left_value, right, |x, y| operation.apply(x, y))))
+                            .collect();
+                        Ok(OperationResult::GroupValues(transformed_values))
+                    }
+                    (OperationResult::GroupValues(left), OperationResult::GroupValues(right)) => {
+                        let left = group_map(left);
+                        let left_groups = FnvHashSet::from_iter(left.keys());
+                        let right = group_map(right);
+                        let right_groups = FnvHashSet::from_iter(right.keys());
+
+                        let transformed_values = left_groups.intersection(&right_groups)
+                            .map(|&group| (
+                                group.clone(),
+                                option_op((&left[group]).clone(), (&right[group]).clone(), |x, y| operation.apply(x, y))
+                            ))
+                            .collect();
+                        Ok(OperationResult::GroupValues(transformed_values))
+                    }
+                    (OperationResult::Value(left), OperationResult::Value(right)) => {
+                        Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))))
+                    }
+                    _ => { Ok(OperationResult::Value(None)) }
+                }
             }
             MetricQueryExpression::Function { function, arguments } => {
-                let mut transformed_arguments = Vec::new();
-                for argument in arguments {
-                    transformed_arguments.push(
-                        evaluate(this, time_range, argument)?
-                            .value()
-                            .ok_or_else(|| MetricsEngineError::UnexpectedResult)?
-                    );
+                let transformed_arguments = transform_with_result(
+                    arguments.into_iter(),
+                    |argument| evaluate(this, time_range, argument)
+                )?;
+
+                if transformed_arguments.is_empty() {
+                    return Ok(OperationResult::Value(None));
                 }
 
-                Ok(OperationResult::Value(function.apply(&transformed_arguments)))
+                if transformed_arguments[0].is_group_values() {
+                    let transformed_arguments = transform_with_result::<_, _, MetricsEngineError>(
+                        transformed_arguments.into_iter(),
+                        |argument| Ok(
+                            group_map(
+                                argument
+                                    .group_values()
+                                    .ok_or_else(|| MetricsEngineError::UnexpectedResult)?
+                            )
+                        )
+                    )?;
+
+                    let overlapping_groups = get_overlapping_groups(&transformed_arguments);
+                    let transformed_values = overlapping_groups
+                        .iter()
+                        .map(|group| {
+                            // Extract arguments for each group
+                            let group_arguments = transformed_arguments
+                                .iter()
+                                .map(|argument| argument.get(group).cloned())
+                                .flatten()
+                                .flatten()
+                                .collect::<Vec<_>>();
+
+                            // If an argument lacks a group, then the flattening above would make us loose an argument
+                            if group_arguments.len() == transformed_arguments.len() {
+                                (group.clone(), function.apply(&group_arguments))
+                            } else {
+                                (group.clone(), None)
+                            }
+                        })
+                        .collect();
+                    Ok(OperationResult::GroupValues(transformed_values))
+                } else {
+                    let transformed_arguments = transform_with_result(
+                        transformed_arguments.into_iter(),
+                        |argument| argument.value().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+                    )?;
+
+                    Ok(OperationResult::Value(function.apply(&transformed_arguments)))
+                }
             }
         }
     }
@@ -199,6 +274,33 @@ pub fn query_in_window(this: &MetricsEngine, query: MetricQuery, duration: Durat
     } else {
         Err(MetricsEngineError::UnexpectedResult)
     }
+}
+
+type GroupMap = FnvHashMap<String, Option<f64>>;
+
+fn group_map(values: GroupValues) -> GroupMap {
+    FnvHashMap::from_iter(values.into_iter())
+}
+
+fn get_overlapping_groups(groups: &[GroupMap]) -> FnvHashSet<String> {
+    let mut overlapping_groups = FnvHashSet::<String>::from_iter(groups[0].keys().cloned());
+    for group in groups.iter().skip(1) {
+        overlapping_groups = FnvHashSet::from_iter(
+            overlapping_groups.intersection(&FnvHashSet::from_iter(group.keys().cloned())).cloned()
+        );
+    }
+
+    overlapping_groups
+}
+
+fn transform_with_result<TIn, TOut, E>(iterator: impl Iterator<Item=TIn>, apply: impl Fn(TIn) -> Result<TOut, E>) -> Result<Vec<TOut>, E> {
+    let mut transformed = Vec::new();
+
+    for item in iterator {
+        transformed.push(apply(item)?);
+    }
+
+    Ok(transformed)
 }
 
 fn option_op(left: Option<f64>, right: Option<f64>, op: impl Fn(f64, f64) -> f64) -> Option<f64> {

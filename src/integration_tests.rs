@@ -8,10 +8,11 @@ use tempfile::tempdir;
 
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue};
+use crate::engine::querying::{MetricQuery, MetricQueryExpression};
 use crate::metric::common::GenericMetric;
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
-use crate::metric::expression::{Function, TransformExpression};
+use crate::metric::expression::{ArithmeticOperation, Function, TransformExpression};
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
 use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
@@ -608,5 +609,184 @@ fn test_metrics_engine1() {
     assert_eq!(
         Some(144328.0),
         metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().value()
+    );
+}
+
+#[test]
+fn test_metrics_engine_query1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
+
+    let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    metrics_engine.add_gauge_metric("cpu").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metrics_engine.gauge("cpu", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(100.0 * 0.6676723153748684),
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Value(100.0)),
+                    right: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu".to_string(),
+                            query: Query::placeholder()
+                        }
+                    )
+                }
+            )
+        ).unwrap().value()
+    );
+}
+
+#[test]
+fn test_metrics_engine_query2() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
+
+    let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    metrics_engine.add_gauge_metric("cpu1").unwrap();
+    metrics_engine.add_gauge_metric("cpu2").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metrics_engine.gauge("cpu1", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+        metrics_engine.gauge("cpu2", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64 * SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(1.45836899750842),
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Divide,
+                    left: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu1".to_string(),
+                            query: Query::placeholder()
+                        }
+                    ),
+                    right: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu2".to_string(),
+                            query: Query::placeholder()
+                        }
+                    )
+                }
+            )
+        ).unwrap().value()
+    );
+}
+
+#[test]
+fn test_metrics_engine_query3() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec![Tag::from_ref("core", "1"), Tag::from_ref("core", "2")];
+
+    let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    metrics_engine.add_gauge_metric("cpu1").unwrap();
+    metrics_engine.add_gauge_metric("cpu2").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metrics_engine.gauge("cpu1", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+        metrics_engine.gauge("cpu2", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64 * SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(vec![("1".to_owned(), Some(1.458353977970301)), ("2".to_owned(), Some(1.458384017513627))]),
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Divide,
+                    left: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu1".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned())
+                        }
+                    ),
+                    right: Box::new(
+                        MetricQueryExpression::Average {
+                            metric: "cpu2".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned())
+                        }
+                    )
+                }
+            )
+        ).unwrap().group_values()
+    );
+}
+
+#[test]
+fn test_metrics_engine_query4() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+    let tags_list = vec![Tag::from_ref("core", "1"), Tag::from_ref("core", "2")];
+
+    let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
+    metrics_engine.add_gauge_metric("cpu1").unwrap();
+    metrics_engine.add_gauge_metric("cpu2").unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        let tags = vec![tags_list[(index % 2)].to_owned()];
+        metrics_engine.gauge("cpu1", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+        metrics_engine.gauge("cpu2", [AddGaugeValue::new(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64 * SAMPLE_DATA.values[index] as f64, tags.clone())].into_iter()).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(vec![("1".to_owned(), Some(0.6676758207088794)), ("2".to_owned(), Some(0.6676688100408572))]),
+        metrics_engine.query(
+            MetricQuery::new(
+                TimeRange::new(start_time, end_time),
+                MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average {
+                            metric: "cpu1".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned())
+                        },
+                        MetricQueryExpression::Average {
+                            metric: "cpu2".to_string(),
+                            query: Query::placeholder().with_group_by("core".to_owned())
+                        }
+                    ]
+                }
+            )
+        ).unwrap().group_values()
     );
 }

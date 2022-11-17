@@ -12,13 +12,14 @@ use std::fmt::{Display};
 use serde_json::json;
 
 pub type TimeValues = Vec<(f64, Option<f64>)>;
+pub type GroupValues = Vec<(String, Option<f64>)>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {
     NotSupported,
     Value(Option<f64>),
     TimeValues(TimeValues),
-    GroupValues(Vec<(String, Option<f64>)>),
+    GroupValues(GroupValues),
     GroupTimeValues(Vec<(String, Vec<(f64, Option<f64>)>)>)
 }
 
@@ -37,10 +38,24 @@ impl OperationResult {
         }
     }
 
+    pub fn group_values(self) -> Option<GroupValues> {
+        match self {
+            OperationResult::GroupValues(values) => Some(values),
+            _ => None
+        }
+    }
+
     pub fn error_message(&self) -> Option<String> {
         match self {
             OperationResult::NotSupported => Some("Not supported operation.".to_owned()),
             _ => None
+        }
+    }
+
+    pub fn is_group_values(&self) -> bool {
+        match self {
+            OperationResult::GroupValues(_) => true,
+            _ => false
         }
     }
 
