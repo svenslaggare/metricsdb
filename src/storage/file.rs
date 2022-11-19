@@ -238,6 +238,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     }
 }
 
+#[repr(C)]
 struct Header {
     num_blocks: usize,
     block_duration: u64,
@@ -247,6 +248,7 @@ struct Header {
     committed_block_index: Option<usize>
 }
 
+#[repr(C)]
 struct Block<E: Copy> {
     size: usize,
     start_time: Time,
@@ -376,6 +378,7 @@ impl<E: Copy> Block<E> {
 }
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 struct SubBlock<E: Copy> {
     offset: u32,
     capacity: u32,

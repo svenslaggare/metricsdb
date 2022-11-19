@@ -8,6 +8,7 @@ pub type Tags = u128;
 pub const TIME_SCALE: u64 = 1_000_000;
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct Datapoint<T: Copy> {
     pub time_offset: u32,
     pub value: T
