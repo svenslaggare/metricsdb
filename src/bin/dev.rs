@@ -16,12 +16,12 @@ use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
 fn main() {
-    // main_gauge();
+    main_gauge();
     // main_count();
     // main_ratio();
     // main_engine();
     // main_engine_existing1();
-    main_engine_existing2();
+    // main_engine_existing2();
 }
 
 #[derive(Deserialize)]
@@ -38,8 +38,8 @@ fn main_gauge() {
     println!("n: {}", data.times.len());
 
     let mut metric = DefaultGaugeMetric::new(Path::new("test_metric")).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
-    metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
+    // metric.add_primary_tag(PrimaryTag::Named(tags_list[0].clone())).unwrap();
+    // metric.add_primary_tag(PrimaryTag::Named(tags_list[1].clone())).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge", TimeMeasurementUnit::Seconds);
