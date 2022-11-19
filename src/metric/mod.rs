@@ -32,6 +32,13 @@ impl OperationResult {
         }
     }
 
+    pub fn group_values(self) -> Option<GroupValues> {
+        match self {
+            OperationResult::GroupValues(values) => Some(values),
+            _ => None
+        }
+    }
+
     pub fn time_values(self) -> Option<TimeValues> {
         match self {
             OperationResult::TimeValues(values) => Some(values),
@@ -39,9 +46,9 @@ impl OperationResult {
         }
     }
 
-    pub fn group_values(self) -> Option<GroupValues> {
+    pub fn group_time_values(self) -> Option<GroupTimeValues> {
         match self {
-            OperationResult::GroupValues(values) => Some(values),
+            OperationResult::GroupTimeValues(values) => Some(values),
             _ => None
         }
     }
@@ -57,6 +64,21 @@ impl OperationResult {
         match self {
             OperationResult::GroupValues(_) => true,
             _ => false
+        }
+    }
+
+    pub fn is_group_time_values(&self) -> bool {
+        match self {
+            OperationResult::GroupTimeValues(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn num_windows(&self) -> Option<usize> {
+        match self {
+            OperationResult::TimeValues(values) => Some(values.len()),
+            OperationResult::GroupTimeValues(values) => values.first().map(|group| group.1.len()),
+            _ => None
         }
     }
 

@@ -215,9 +215,9 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                         return Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))));
                     }
                     (OperationResult::GroupTimeValues(left), OperationResult::GroupTimeValues(right)) => {
-                        let left = FnvHashMap::from_iter(left.into_iter());
+                        let left = group_map(left);
                         let left_groups = FnvHashSet::from_iter(left.keys());
-                        let right = FnvHashMap::from_iter(right.into_iter());
+                        let right = group_map(right);
                         let right_groups = FnvHashSet::from_iter(right.keys());
 
                         let transformed_values = left_groups.intersection(&right_groups)
@@ -259,34 +259,73 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                 let mut transformed_arguments = Vec::new();
                 let num_arguments = arguments.len();
                 for argument in arguments {
-                    transformed_arguments.push(
-                        evaluate(this, time_range, duration, argument)?
-                            .time_values()
-                            .ok_or_else(|| MetricsEngineError::UnexpectedResult)?
-                    );
+                    transformed_arguments.push(evaluate(this, time_range, duration, argument)?);
                 }
 
                 let num_windows = transformed_arguments
                     .get(0)
-                    .map(|arg| arg.len())
+                    .map(|arg| arg.num_windows())
+                    .flatten()
                     .ok_or_else(|| MetricsEngineError::UnexpectedResult)?;
 
-                let mut results = Vec::new();
-                for window_index in 0..num_windows {
-                    let time = transformed_arguments[0][window_index].0;
-                    let mut this_window_transformed_arguments = Vec::new();
-                    for windows_argument in &transformed_arguments {
-                        if let Some(value) = windows_argument[window_index].1 {
-                            this_window_transformed_arguments.push(value);
+                if transformed_arguments[0].is_group_time_values() {
+                    let transformed_arguments = transform_with_result::<_, _, MetricsEngineError>(
+                        transformed_arguments.into_iter(),
+                        |argument| Ok(
+                            group_map(
+                                argument
+                                    .group_time_values()
+                                    .ok_or_else(|| MetricsEngineError::UnexpectedResult)?
+                            )
+                        )
+                    )?;
+
+                    let overlapping_groups = get_overlapping_groups(&transformed_arguments);
+
+                    let mut results = Vec::new();
+                    for group in overlapping_groups {
+                        let mut group_results = Vec::new();
+                        for window_index in 0..num_windows {
+                            let time = transformed_arguments[0][&group][window_index].0;
+                            let mut this_window_transformed_arguments = Vec::new();
+                            for windows_argument in &transformed_arguments {
+                                if let Some(value) = windows_argument[&group][window_index].1 {
+                                    this_window_transformed_arguments.push(value);
+                                }
+                            }
+
+                            if this_window_transformed_arguments.len() == num_arguments {
+                                group_results.push((time, function.apply(&this_window_transformed_arguments)));
+                            }
+                        }
+
+                        results.push((group, group_results));
+                    }
+
+                    Ok(OperationResult::GroupTimeValues(sorted_time_group_values(results)))
+                } else {
+                    let transformed_arguments = transform_with_result::<_, _, MetricsEngineError>(
+                        transformed_arguments.into_iter(),
+                        |argument| argument.time_values().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+                    )?;
+
+                    let mut results = Vec::new();
+                    for window_index in 0..num_windows {
+                        let time = transformed_arguments[0][window_index].0;
+                        let mut this_window_transformed_arguments = Vec::new();
+                        for windows_argument in &transformed_arguments {
+                            if let Some(value) = windows_argument[window_index].1 {
+                                this_window_transformed_arguments.push(value);
+                            }
+                        }
+
+                        if this_window_transformed_arguments.len() == num_arguments {
+                            results.push((time, function.apply(&this_window_transformed_arguments)));
                         }
                     }
 
-                    if this_window_transformed_arguments.len() == num_arguments {
-                        results.push((time, function.apply(&this_window_transformed_arguments)));
-                    }
+                    Ok(OperationResult::TimeValues(results))
                 }
-
-                Ok(OperationResult::TimeValues(results))
             }
         }
     }
@@ -394,13 +433,11 @@ impl MetricQueryable for MetricsEngine {
     }
 }
 
-type GroupMap = FnvHashMap<String, Option<f64>>;
-
-fn group_map(values: GroupValues) -> GroupMap {
+fn group_map<T>(values: Vec<(String, T)>) -> FnvHashMap<String, T> {
     FnvHashMap::from_iter(values.into_iter())
 }
 
-fn get_overlapping_groups(groups: &[GroupMap]) -> FnvHashSet<String> {
+fn get_overlapping_groups<T>(groups: &[FnvHashMap<String, T>]) -> FnvHashSet<String> {
     let mut overlapping_groups = FnvHashSet::<String>::from_iter(groups[0].keys().cloned());
     for group in groups.iter().skip(1) {
         overlapping_groups = FnvHashSet::from_iter(
@@ -738,6 +775,47 @@ fn test_query_in_window_group2() {
                     operation: ArithmeticOperation::Multiply,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Value(10.0))
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window_group3() {
+    let engine = TestMetricsEngine::new(vec![
+        (
+            "m1".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+            ])
+        ),
+        (
+            "m2".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+            ])
+        ),
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupTimeValues(vec![
+            ("t1".to_owned(), vec![(1.0, Some(4.0)), (2.0, Some(5.0))]),
+            ("t2".to_owned(), vec![(1.0, Some(40.0)), (2.0, Some(50.0))]),
+        ])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
                 }
             },
             Duration::from_secs_f64(1.0)
