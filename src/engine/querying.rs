@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 use fnv::{FnvHashMap, FnvHashSet};
 
@@ -35,35 +36,35 @@ pub enum MetricQueryExpression {
     Function { function: Function, arguments: Vec<MetricQueryExpression> }
 }
 
-pub fn query(this: &MetricsEngine, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
-    fn evaluate(this: &MetricsEngine, time_range: TimeRange, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
+pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
+    fn evaluate<T: MetricQueryable>(engine: &T, time_range: TimeRange, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
         match expression {
             MetricQueryExpression::Average { metric, mut query } => {
                 query.time_range = time_range;
-                this.average(&metric, query)
+                engine.average(&metric, query)
             }
             MetricQueryExpression::Sum { metric, mut query } => {
                 query.time_range = time_range;
-                this.sum(&metric, query)
+                engine.sum(&metric, query)
             }
             MetricQueryExpression::Max { metric, mut query } => {
                 query.time_range = time_range;
-                this.max(&metric, query)
+                engine.max(&metric, query)
             }
             MetricQueryExpression::Min { metric, mut query } => {
                 query.time_range = time_range;
-                this.min(&metric, query)
+                engine.min(&metric, query)
             }
             MetricQueryExpression::Percentile { metric, mut query, percentile } => {
                 query.time_range = time_range;
-                this.percentile(&metric, query, percentile)
+                engine.percentile(&metric, query, percentile)
             }
             MetricQueryExpression::Value(value) => {
                 Ok(OperationResult::Value(Some(value)))
             }
             MetricQueryExpression::Arithmetic { operation, left, right } => {
-                let left = evaluate(this, time_range, *left)?;
-                let right = evaluate(this, time_range, *right)?;
+                let left = evaluate(engine, time_range, *left)?;
+                let right = evaluate(engine, time_range, *right)?;
 
                 match (left, right) {
                     (OperationResult::Value(left), OperationResult::GroupValues(right)) => {
@@ -103,7 +104,7 @@ pub fn query(this: &MetricsEngine, query: MetricQuery) -> MetricsEngineResult<Op
             MetricQueryExpression::Function { function, arguments } => {
                 let transformed_arguments = transform_with_result(
                     arguments.into_iter(),
-                    |argument| evaluate(this, time_range, argument)
+                    |argument| evaluate(engine, time_range, argument)
                 )?;
 
                 if transformed_arguments.is_empty() {
@@ -155,11 +156,11 @@ pub fn query(this: &MetricsEngine, query: MetricQuery) -> MetricsEngineResult<Op
         }
     }
 
-    evaluate(this, query.time_range, query.expression)
+    evaluate(engine, query.time_range, query.expression)
 }
 
-pub fn query_in_window(this: &MetricsEngine, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
-    fn evaluate(this: &MetricsEngine, time_range: TimeRange, duration: Duration, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
+pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
+    fn evaluate<T: MetricQueryable>(this: &T, time_range: TimeRange, duration: Duration, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
         match expression {
             MetricQueryExpression::Average { metric, mut query } => {
                 query.time_range = time_range;
@@ -193,21 +194,20 @@ pub fn query_in_window(this: &MetricsEngine, query: MetricQuery, duration: Durat
                 let left = evaluate(this, time_range, duration, *left)?;
                 let right = evaluate(this, time_range, duration, *right)?;
 
-                let left_constant = left.clone().value();
-                let right_constant = right.clone().value();
-                let (left, right) = match (left.time_values(), right.time_values()) {
-                    (Some(left), Some(right)) => (left, right),
-                    (Some(left), None) => {
-                        let right = constant_time_values(&left, right_constant);
+                let (left, right) = match (left, right) {
+                    (OperationResult::TimeValues(left), OperationResult::TimeValues(right)) => (left, right),
+                    (OperationResult::TimeValues(left), OperationResult::Value(right)) => {
+                        let right = constant_time_values(&left, right);
                         (left, right)
-                    },
-                    (None, Some(right)) => {
-                        let left = constant_time_values(&right, left_constant);
-                        (left, right)
-                    },
-                    (None, None) => {
-                        return Ok(OperationResult::Value(option_op(left_constant, right_constant, |x, y| operation.apply(x, y))));
                     }
+                    (OperationResult::Value(left), OperationResult::TimeValues(right)) => {
+                        let left = constant_time_values(&right, left);
+                        (left, right)
+                    }
+                    (OperationResult::Value(left), OperationResult::Value(right)) => {
+                        return Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))));
+                    }
+                    _ => { return Err(MetricsEngineError::UnexpectedResult); }
                 };
 
                 Ok(OperationResult::TimeValues(transform_time_values(left, right, |x, y| operation.apply(x, y))))
@@ -269,10 +269,66 @@ pub fn query_in_window(this: &MetricsEngine, query: MetricQuery, duration: Durat
         time_values.iter().map(|(time, _)| (*time, constant)).collect()
     }
 
-    if let Some(time_values) = evaluate(this, query.time_range, duration, query.expression)?.time_values() {
+    if let Some(time_values) = evaluate(engine, query.time_range, duration, query.expression)?.time_values() {
         Ok(OperationResult::TimeValues(time_values.into_iter().filter(|(_, value)| value.is_some()).collect()))
     } else {
         Err(MetricsEngineError::UnexpectedResult)
+    }
+}
+
+pub trait MetricQueryable {
+    fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult>;
+    fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult>;
+    fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult>;
+    fn min(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult>;
+    fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult>;
+
+    fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult>;
+    fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult>;
+    fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult>;
+    fn min_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult>;
+    fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<OperationResult>;
+}
+
+impl MetricQueryable for MetricsEngine {
+    fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
+        self.average(metric, query)
+    }
+
+    fn sum(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
+        self.sum(metric, query)
+    }
+
+    fn max(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
+        self.max(metric, query)
+    }
+
+    fn min(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
+        self.min(metric, query)
+    }
+
+    fn percentile(&self, metric: &str, query: Query, percentile: i32) -> MetricsEngineResult<OperationResult> {
+        self.percentile(metric, query, percentile)
+    }
+
+    fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.average_in_window(metric, query, duration)
+    }
+
+    fn sum_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.sum_in_window(metric, query, duration)
+    }
+
+    fn max_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.max_in_window(metric, query, duration)
+    }
+
+    fn min_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.min_in_window(metric, query, duration)
+    }
+
+    fn percentile_in_window(&self, metric: &str, query: Query, duration: Duration, percentile: i32) -> MetricsEngineResult<OperationResult> {
+        self.percentile_in_window(metric, query, duration, percentile)
     }
 }
 
@@ -309,4 +365,249 @@ fn option_op(left: Option<f64>, right: Option<f64>, op: impl Fn(f64, f64) -> f64
     } else {
         None
     }
+}
+
+struct TestMetricsEngine {
+    metric_values: HashMap<String, OperationResult>
+}
+
+impl TestMetricsEngine {
+    pub fn new(metric_values: Vec<(String, OperationResult)>) -> TestMetricsEngine {
+        TestMetricsEngine {
+            metric_values: HashMap::from_iter(metric_values.into_iter())
+        }
+    }
+}
+
+impl MetricQueryable for TestMetricsEngine {
+    fn average(&self, metric: &str, _query: Query) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn sum(&self, metric: &str, _query: Query) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn max(&self, metric: &str, _query: Query) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn min(&self, metric: &str, _query: Query) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn percentile(&self, metric: &str, _query: Query, _percentile: i32) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn average_in_window(&self, metric: &str, _query: Query, _duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn sum_in_window(&self, metric: &str, _query: Query, _duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn max_in_window(&self, metric: &str, _query: Query, _duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn min_in_window(&self, metric: &str, _query: Query, _duration: Duration) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+
+    fn percentile_in_window(&self, metric: &str, _query: Query, _duration: Duration, _percentile: i32) -> MetricsEngineResult<OperationResult> {
+        self.metric_values.get(metric).cloned().ok_or_else(|| MetricsEngineError::UnexpectedResult)
+    }
+}
+
+#[test]
+fn test_query1() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::Value(Some(2.0))),
+        ("m2".to_owned(), OperationResult::Value(Some(4.0)))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::Value(Some(8.0))),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                }
+            }
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query2() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::Value(Some(2.0))),
+        ("m2".to_owned(), OperationResult::Value(Some(4.0)))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::Value(Some(4.0))),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
+                }
+            }
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_group1() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))])),
+        ("m2".to_owned(), OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0)), ("v3".to_owned(), Some(5.0))])),
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(7.0))])),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Add,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                }
+            }
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_group2() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupValues(vec![("v1".to_owned(), Some(4.0)), ("v2".to_owned(), Some(6.0))])),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Value(2.0))
+                }
+            }
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_group3() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))])),
+        ("m2".to_owned(), OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0)), ("v3".to_owned(), Some(5.0))])),
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0))])),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
+                }
+            }
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window1() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::TimeValues(vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)])),
+        ("m2".to_owned(), OperationResult::TimeValues(vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::TimeValues(vec![(1.0, Some(6.0)), (2.0, Some(8.0))])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Add,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window2() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::TimeValues(vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::TimeValues(vec![(0.0, Some(2.0)), (1.0, Some(4.0)), (2.0, Some(6.0))])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Value(2.0))
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window3() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::TimeValues(vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)])),
+        ("m2".to_owned(), OperationResult::TimeValues(vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::TimeValues(vec![(1.0, Some(4.0)), (2.0, Some(5.0))])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
 }
