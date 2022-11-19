@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
-use crate::metric::{GroupValues, OperationResult, TimeValues};
+use crate::metric::{GroupTimeValues, GroupValues, OperationResult, TimeValues};
 use crate::metric::expression::{ArithmeticOperation, Function};
 use crate::model::{Query, TimeRange};
 
@@ -72,14 +72,14 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
                             .into_iter()
                             .map(|(right_group, right_value)| (right_group, option_op(left, right_value, |x, y| operation.apply(x, y))))
                             .collect();
-                        Ok(OperationResult::GroupValues(transformed_values))
+                        Ok(OperationResult::GroupValues(sorted_group_values(transformed_values)))
                     }
                     (OperationResult::GroupValues(left), OperationResult::Value(right)) => {
                         let transformed_values = left
                             .into_iter()
                             .map(|(left_group, left_value)| (left_group, option_op(left_value, right, |x, y| operation.apply(x, y))))
                             .collect();
-                        Ok(OperationResult::GroupValues(transformed_values))
+                        Ok(OperationResult::GroupValues(sorted_group_values(transformed_values)))
                     }
                     (OperationResult::GroupValues(left), OperationResult::GroupValues(right)) => {
                         let left = group_map(left);
@@ -93,7 +93,7 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
                                 option_op((&left[group]).clone(), (&right[group]).clone(), |x, y| operation.apply(x, y))
                             ))
                             .collect();
-                        Ok(OperationResult::GroupValues(transformed_values))
+                        Ok(OperationResult::GroupValues(sorted_group_values(transformed_values)))
                     }
                     (OperationResult::Value(left), OperationResult::Value(right)) => {
                         Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))))
@@ -143,7 +143,7 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
                             }
                         })
                         .collect();
-                    Ok(OperationResult::GroupValues(transformed_values))
+                    Ok(OperationResult::GroupValues(sorted_group_values(transformed_values)))
                 } else {
                     let transformed_arguments = transform_with_result(
                         transformed_arguments.into_iter(),
@@ -154,6 +154,11 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
                 }
             }
         }
+    }
+
+    fn sorted_group_values(mut values: GroupValues) -> GroupValues {
+        values.sort_by(|x, y| x.0.cmp(&y.0));
+        values
     }
 
     evaluate(engine, query.time_range, query.expression)
@@ -194,23 +199,61 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                 let left = evaluate(this, time_range, duration, *left)?;
                 let right = evaluate(this, time_range, duration, *right)?;
 
-                let (left, right) = match (left, right) {
-                    (OperationResult::TimeValues(left), OperationResult::TimeValues(right)) => (left, right),
+                match (left, right) {
+                    (OperationResult::TimeValues(left), OperationResult::TimeValues(right)) => {
+                        Ok(OperationResult::TimeValues(transform_time_values(&left, &right, |x, y| operation.apply(x, y))))
+                    },
                     (OperationResult::TimeValues(left), OperationResult::Value(right)) => {
                         let right = constant_time_values(&left, right);
-                        (left, right)
+                        Ok(OperationResult::TimeValues(transform_time_values(&left, &right, |x, y| operation.apply(x, y))))
                     }
                     (OperationResult::Value(left), OperationResult::TimeValues(right)) => {
                         let left = constant_time_values(&right, left);
-                        (left, right)
+                        Ok(OperationResult::TimeValues(transform_time_values(&left, &right, |x, y| operation.apply(x, y))))
                     }
                     (OperationResult::Value(left), OperationResult::Value(right)) => {
                         return Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))));
                     }
-                    _ => { return Err(MetricsEngineError::UnexpectedResult); }
-                };
+                    (OperationResult::GroupTimeValues(left), OperationResult::GroupTimeValues(right)) => {
+                        let left = FnvHashMap::from_iter(left.into_iter());
+                        let left_groups = FnvHashSet::from_iter(left.keys());
+                        let right = FnvHashMap::from_iter(right.into_iter());
+                        let right_groups = FnvHashSet::from_iter(right.keys());
 
-                Ok(OperationResult::TimeValues(transform_time_values(left, right, |x, y| operation.apply(x, y))))
+                        let transformed_values = left_groups.intersection(&right_groups)
+                            .map(|&group| {
+                                if let (Some(left), Some(right)) = (left.get(group), right.get(group)) {
+                                    Some((group.to_owned(), transform_time_values(left, right, |x, y| operation.apply(x, y))))
+                                } else {
+                                    None
+                                }
+                            })
+                            .flatten()
+                            .collect();
+                        Ok(OperationResult::GroupTimeValues(sorted_time_group_values(transformed_values)))
+                    }
+                    (OperationResult::GroupTimeValues(left), OperationResult::Value(right)) => {
+                        let transformed_values = left
+                            .into_iter()
+                            .map(|(group, left)| {
+                                let right = constant_time_values(&left, right);
+                                (group, transform_time_values(&left, &right, |x, y| operation.apply(x, y)))
+                            })
+                            .collect();
+                        Ok(OperationResult::GroupTimeValues(sorted_time_group_values(transformed_values)))
+                    }
+                    (OperationResult::Value(left), OperationResult::GroupTimeValues(right)) => {
+                        let transformed_values = right
+                            .into_iter()
+                            .map(|(group, right)| {
+                                let left = constant_time_values(&right, left);
+                                (group, transform_time_values(&left, &right, |x, y| operation.apply(x, y)))
+                            })
+                            .collect();
+                        Ok(OperationResult::GroupTimeValues(sorted_time_group_values(transformed_values)))
+                    }
+                    _ => { return Err(MetricsEngineError::UnexpectedResult); }
+                }
             }
             MetricQueryExpression::Function { function, arguments } => {
                 let mut transformed_arguments = Vec::new();
@@ -248,7 +291,7 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
         }
     }
 
-    fn transform_time_values(left: TimeValues, right: TimeValues, op: impl Fn(f64, f64) -> f64) -> TimeValues {
+    fn transform_time_values(left: &TimeValues, right: &TimeValues, op: impl Fn(f64, f64) -> f64) -> TimeValues {
         let mut results = Vec::new();
         for ((left_time, left_value), (right_time, right_value)) in left.iter().zip(right.iter()) {
             assert_eq!(left_time, right_time);
@@ -269,10 +312,29 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
         time_values.iter().map(|(time, _)| (*time, constant)).collect()
     }
 
-    if let Some(time_values) = evaluate(engine, query.time_range, duration, query.expression)?.time_values() {
-        Ok(OperationResult::TimeValues(time_values.into_iter().filter(|(_, value)| value.is_some()).collect()))
-    } else {
-        Err(MetricsEngineError::UnexpectedResult)
+    fn filter_time_values(time_values: TimeValues) -> TimeValues {
+        time_values.into_iter().filter(|(_, value)| value.is_some()).collect()
+    }
+
+    fn sorted_time_group_values(mut values: GroupTimeValues) -> GroupTimeValues {
+        values.sort_by(|x, y| x.0.cmp(&y.0));
+        values
+    }
+
+    match evaluate(engine, query.time_range, duration, query.expression)? {
+        OperationResult::TimeValues(time_values) => Ok(OperationResult::TimeValues(filter_time_values(time_values))),
+        OperationResult::GroupTimeValues(group_time_values) => {
+            Ok(
+                OperationResult::GroupTimeValues(
+                    group_time_values
+                        .into_iter()
+                        .map(|(group, time_values)| (group, filter_time_values(time_values)))
+                        .filter(|(_, values)| !values.is_empty())
+                        .collect()
+                )
+            )
+        }
+        _ => { Err(MetricsEngineError::UnexpectedResult) }
     }
 }
 
@@ -605,6 +667,77 @@ fn test_query_in_window3() {
                         MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
                         MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
                     ]
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window_group1() {
+    let engine = TestMetricsEngine::new(vec![
+        (
+            "m1".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+            ])
+        ),
+        (
+            "m2".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+            ])
+        ),
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupTimeValues(vec![
+            ("t1".to_owned(), vec![(1.0, Some(6.0)), (2.0, Some(8.0))]),
+            ("t2".to_owned(), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
+        ])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Add,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                }
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window_group2() {
+    let engine = TestMetricsEngine::new(vec![
+        (
+            "m1".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+            ])
+        )
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupTimeValues(vec![
+            ("t1".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0))]),
+            ("t2".to_owned(), vec![(0.0, Some(100.0)), (1.0, Some(200.0)), (2.0, Some(300.0))]),
+        ])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Value(10.0))
                 }
             },
             Duration::from_secs_f64(1.0)

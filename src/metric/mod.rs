@@ -13,6 +13,7 @@ use serde_json::json;
 
 pub type TimeValues = Vec<(f64, Option<f64>)>;
 pub type GroupValues = Vec<(String, Option<f64>)>;
+pub type GroupTimeValues = Vec<(String, TimeValues)>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {
@@ -20,7 +21,7 @@ pub enum OperationResult {
     Value(Option<f64>),
     TimeValues(TimeValues),
     GroupValues(GroupValues),
-    GroupTimeValues(Vec<(String, Vec<(f64, Option<f64>)>)>)
+    GroupTimeValues(GroupTimeValues)
 }
 
 impl OperationResult {
