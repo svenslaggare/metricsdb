@@ -5,47 +5,46 @@ import numpy as np
 import requests
 from matplotlib import pyplot as plt
 
-
 def main():
     local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+    base_url = "http://localhost:9090"
 
     while True:
         # time_now = time.time()
-        # time_now = 1667652117.2578413
-        time_now = 1668190594.1490853
+        time_now = 1668874032.213049
 
-        # metric = "cpu_usage"
+        metric = "cpu_usage"
         # metric = "total_memory"
-        metric = "used_memory"
+        # metric = "used_memory"
         # metric = "context_switches"
 
         # group_by = "core"
         # group_by = "host"
         group_by = None
 
-        # response = requests.post(
-        #     "http://localhost:9090/metrics/query/{}".format(metric),
-        #     json={
-        #         "time_range": {
-        #             "start": time_now - 3.0 * 3600.0,
-        #             "end": time_now
-        #         },
-        #         "duration": 10.0,
-        #         "operation": "Average",
-        #         "group_by": group_by,
-        #         # "tags_filter": { "And": ["core:cpu15"] }
-        #         # "output_filter": {
-        #         #     "Compare": {
-        #         #         "operation": "GreaterThan",
-        #         #         "left": {"Transform": "InputValue"},
-        #         #         "right": {"Transform": {"Value": 0.1}}
-        #         #     }
-        #         # }
-        #     }
-        # )
+        response = requests.post(
+            "{}/metrics/query/{}".format(base_url, metric),
+            json={
+                "time_range": {
+                    "start": time_now - 3.0 * 3600.0,
+                    "end": time_now
+                },
+                "duration": 10.0,
+                "operation": "Average",
+                "group_by": group_by,
+                # "tags_filter": { "And": ["core:cpu15"] }
+                # "output_filter": {
+                #     "Compare": {
+                #         "operation": "GreaterThan",
+                #         "left": {"Transform": "InputValue"},
+                #         "right": {"Transform": {"Value": 0.1}}
+                #     }
+                # }
+            }
+        )
 
         # response = requests.post(
-        #     "http://localhost:9090/metrics/advanced-query",
+        #     "{}/metrics/advanced-query".format(base_url),
         #     json={
         #         "time_range": {
         #             "start": time_now - 3.0 * 3600.0,
@@ -53,54 +52,35 @@ def main():
         #         },
         #         "duration": 10.0,
         #         "expression": {
-        #             "Average": {
-        #                 "metric": "cpu_usage",
-        #                 "query": {
-        #                     "tags_filter": { "And": ["core:cpu15"] }
+        #             "Arithmetic": {
+        #                 "operation": "Multiply",
+        #                 "left": {
+        #                     "Value": 100.0
+        #                 },
+        #                 "right": {
+        #                     "Arithmetic": {
+        #                         "operation": "Divide",
+        #                         "left": {
+        #                             "Average": {
+        #                                 "metric": "used_memory",
+        #                                 "query": {}
+        #                             }
+        #                         },
+        #                         "right": {
+        #                             "Average": {
+        #                                 "metric": "total_memory",
+        #                                 "query": {}
+        #                             }
+        #                         }
+        #                     }
         #                 }
         #             }
         #         }
         #     }
         # )
 
-        response = requests.post(
-            "http://localhost:9090/metrics/advanced-query",
-            json={
-                "time_range": {
-                    "start": time_now - 3.0 * 3600.0,
-                    "end": time_now
-                },
-                "duration": 10.0,
-                "expression": {
-                    "Arithmetic": {
-                        "operation": "Multiply",
-                        "left": {
-                            "Value": 100.0
-                        },
-                        "right": {
-                            "Arithmetic": {
-                                "operation": "Divide",
-                                "left": {
-                                    "Average": {
-                                        "metric": "used_memory",
-                                        "query": {}
-                                    }
-                                },
-                                "right": {
-                                    "Average": {
-                                        "metric": "total_memory",
-                                        "query": {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        )
-
         # response = requests.post(
-        #     "http://localhost:9090/metrics/advanced-query",
+        #     "{}/metrics/advanced-query".format(base_url),
         #     json={
         #         "time_range": {
         #             "start": time_now - 3.0 * 3600.0,
@@ -135,7 +115,6 @@ def main():
 
         for group, values in groups:
             ts, ys = zip(*values)
-            # ys = 100.0 * np.array(ys)
             ts = [datetime.datetime.fromtimestamp(t, tz=local_timezone) for t in ts]
             plt.plot(ts, ys, "-o", label=group)
 
