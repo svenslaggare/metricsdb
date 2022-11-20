@@ -414,7 +414,7 @@ impl StreamingTDigest {
         StreamingTDigest {
             digest: TDigest::new_with_size(max_size),
             buffer: Vec::new(),
-            max_buffer_before_merge: 1024
+            max_buffer_before_merge: 512
         }
     }
 
