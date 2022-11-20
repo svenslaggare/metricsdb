@@ -256,11 +256,11 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                 }
             }
             MetricQueryExpression::Function { function, arguments } => {
-                let mut transformed_arguments = Vec::new();
                 let num_arguments = arguments.len();
-                for argument in arguments {
-                    transformed_arguments.push(evaluate(this, time_range, duration, argument)?);
-                }
+                let transformed_arguments = transform_with_result(
+                    arguments.into_iter(),
+                    |argument| evaluate(this, time_range, duration, argument)
+                )?;
 
                 let num_windows = transformed_arguments
                     .get(0)
