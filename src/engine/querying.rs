@@ -165,39 +165,39 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
 }
 
 pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
-    fn evaluate<T: MetricQueryable>(this: &T, time_range: TimeRange, duration: Duration, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
+    fn evaluate<T: MetricQueryable>(engine: &T, time_range: TimeRange, duration: Duration, expression: MetricQueryExpression) -> MetricsEngineResult<OperationResult> {
         match expression {
             MetricQueryExpression::Average { metric, mut query } => {
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
-                this.average_in_window(&metric, query, duration)
+                engine.average_in_window(&metric, query, duration)
             }
             MetricQueryExpression::Sum { metric, mut query } => {
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
-                this.sum_in_window(&metric, query, duration)
+                engine.sum_in_window(&metric, query, duration)
             }
             MetricQueryExpression::Max { metric, mut query } => {
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
-                this.max_in_window(&metric, query, duration)
+                engine.max_in_window(&metric, query, duration)
             }
             MetricQueryExpression::Min { metric, mut query } => {
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
-                this.min_in_window(&metric, query, duration)
+                engine.min_in_window(&metric, query, duration)
             }
             MetricQueryExpression::Percentile { metric, mut query, percentile } => {
                 query.time_range = time_range;
                 query.remove_empty_datapoints = false;
-                this.percentile_in_window(&metric, query, duration, percentile)
+                engine.percentile_in_window(&metric, query, duration, percentile)
             }
             MetricQueryExpression::Value(value) => {
                 Ok(OperationResult::Value(Some(value)))
             }
             MetricQueryExpression::Arithmetic { operation, left, right } => {
-                let left = evaluate(this, time_range, duration, *left)?;
-                let right = evaluate(this, time_range, duration, *right)?;
+                let left = evaluate(engine, time_range, duration, *left)?;
+                let right = evaluate(engine, time_range, duration, *right)?;
 
                 match (left, right) {
                     (OperationResult::TimeValues(left), OperationResult::TimeValues(right)) => {
@@ -212,7 +212,7 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                         Ok(OperationResult::TimeValues(transform_time_values(&left, &right, |x, y| operation.apply(x, y))))
                     }
                     (OperationResult::Value(left), OperationResult::Value(right)) => {
-                        return Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))));
+                        Ok(OperationResult::Value(option_op(left, right, |x, y| operation.apply(x, y))))
                     }
                     (OperationResult::GroupTimeValues(left), OperationResult::GroupTimeValues(right)) => {
                         let left = group_map(left);
@@ -259,7 +259,7 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                 let num_arguments = arguments.len();
                 let transformed_arguments = transform_with_result(
                     arguments.into_iter(),
-                    |argument| evaluate(this, time_range, duration, argument)
+                    |argument| evaluate(engine, time_range, duration, argument)
                 )?;
 
                 let num_windows = transformed_arguments
