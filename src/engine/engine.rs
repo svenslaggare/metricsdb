@@ -233,6 +233,14 @@ impl MetricsEngine {
         }
     }
 
+    pub fn query(&self, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
+        querying::query(self, query)
+    }
+
+    pub fn query_in_window(&self, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
+        querying::query_in_window(self, query, duration)
+    }
+
     pub fn average(&self, metric: &str, query: Query) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average(query)),
@@ -273,10 +281,6 @@ impl MetricsEngine {
         }
     }
 
-    pub fn query(&self, query: MetricQuery) -> MetricsEngineResult<OperationResult> {
-        querying::query(self, query)
-    }
-
     pub fn average_in_window(&self, metric: &str, query: Query, duration: Duration) -> MetricsEngineResult<OperationResult> {
         match self.metrics.get_metric(metric)?.read().unwrap().deref() {
             Metric::Gauge(metric) => Ok(metric.average_in_window(query, duration)),
@@ -315,10 +319,6 @@ impl MetricsEngine {
             Metric::Count(metric) => Ok(metric.percentile_in_window(query, duration, percentile)),
             Metric::Ratio(metric) => Ok(metric.percentile_in_window(query, duration, percentile))
         }
-    }
-
-    pub fn query_in_window(&self, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
-        querying::query_in_window(self, query, duration)
     }
 
     pub fn scheduled(&self) {
