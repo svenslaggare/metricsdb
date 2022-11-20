@@ -17,10 +17,9 @@ use axum::routing::{post, put};
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError};
 use crate::engine::querying::{MetricQuery, MetricQueryExpression};
-use crate::metric::expression::{FilterExpression, TransformExpression};
 use crate::metric::OperationResult;
-use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
-use crate::model::{Query, TimeRange};
+use crate::metric::tags::{PrimaryTag, Tag};
+use crate::model::{TimeRange};
 
 pub async fn main() {
     let app_state = Arc::new(AppState::new());
@@ -34,8 +33,7 @@ pub async fn main() {
         .route("/metrics/ratio", post(create_ratio_metric))
         .route("/metrics/ratio/:name", put(add_ratio_metric_value))
 
-        .route("/metrics/query/:name", post(metric_query))
-        .route("/metrics/advanced-query", post(advanced_metric_query))
+        .route("/metrics/query", post(metric_query))
 
         .route("/metrics/primary-tag/:name", post(add_primary_tag))
         .route("/metrics/auto-primary-tag/:name", post(add_auto_primary_tag))
@@ -74,7 +72,6 @@ impl IntoResponse for MetricsEngineError {
             MetricsEngineError::MetricNotFound => (StatusCode::NOT_FOUND, format!("Metric not found.")),
             MetricsEngineError::WrongMetricType => (StatusCode::BAD_REQUEST, format!("Wrong metric type.")),
             MetricsEngineError::UnexpectedResult => (StatusCode::BAD_REQUEST, format!("Unexpected result.")),
-            MetricsEngineError::InvalidQueryInput => (StatusCode::BAD_REQUEST, format!("Invalid query input.")),
             MetricsEngineError::Metric(err) => (StatusCode::BAD_REQUEST, format!("Metric error: {:?}", err))
         };
 
@@ -185,100 +182,14 @@ async fn add_ratio_metric_value(State(state): State<Arc<AppState>>,
 }
 
 #[derive(Deserialize)]
-enum MetricOperation {
-    Average,
-    Sum,
-    Max,
-    Min,
-    Percentile
-}
-
-#[derive(Deserialize)]
 struct InputMetricQuery {
-    time_range: TimeRange,
-    duration: Option<f64>,
-    operation: MetricOperation,
-    percentile: Option<i32>,
-    tags_filter: Option<TagsFilter>,
-    group_by: Option<String>,
-    output_filter: Option<FilterExpression>,
-    output_transform: Option<TransformExpression>
-}
-
-async fn metric_query(State(state): State<Arc<AppState>>,
-                      Path(name): Path<String>,
-                      Json(input_query): Json<InputMetricQuery>) -> ServerResult<Response> {
-    let mut query = Query::new(input_query.time_range);
-    if let Some(tags_filter) = input_query.tags_filter {
-        query = query.with_tags_filter(tags_filter);
-    }
-
-    if let Some(group_by) = input_query.group_by {
-        query = query.with_group_by(group_by);
-    }
-
-    if let Some(output_filter) = input_query.output_filter {
-        query = query.with_output_filter(output_filter);
-    }
-
-    if let Some(output_transform) = input_query.output_transform {
-        query = query.with_output_transform(output_transform);
-    }
-
-    let value = match input_query.operation {
-        MetricOperation::Average => {
-            if let Some(duration) = input_query.duration {
-                state.metrics_engine.average_in_window(&name, query, Duration::from_secs_f64(duration))?
-            } else {
-                state.metrics_engine.average(&name, query)?
-            }
-        },
-        MetricOperation::Sum => {
-            if let Some(duration) = input_query.duration {
-                state.metrics_engine.sum_in_window(&name, query, Duration::from_secs_f64(duration))?
-            } else {
-                state.metrics_engine.sum(&name, query)?
-            }
-        },
-        MetricOperation::Max => {
-            if let Some(duration) = input_query.duration {
-                state.metrics_engine.max_in_window(&name, query, Duration::from_secs_f64(duration))?
-            } else {
-                state.metrics_engine.max(&name, query)?
-            }
-        },
-        MetricOperation::Min => {
-            if let Some(duration) = input_query.duration {
-                state.metrics_engine.min_in_window(&name, query, Duration::from_secs_f64(duration))?
-            } else {
-                state.metrics_engine.min(&name, query)?
-            }
-        },
-        MetricOperation::Percentile => {
-            if let Some(percentile) = input_query.percentile {
-                if let Some(duration) = input_query.duration {
-                    state.metrics_engine.percentile_in_window(&name, query, Duration::from_secs_f64(duration), percentile)?
-                } else {
-                    state.metrics_engine.percentile(&name, query, percentile)?
-                }
-            } else {
-                return Err(MetricsEngineError::InvalidQueryInput);
-            }
-        }
-    };
-
-    operation_result_response(value)
-}
-
-#[derive(Deserialize)]
-struct InputAdvancedMetricQuery {
     time_range: TimeRange,
     duration: Option<f64>,
     expression: MetricQueryExpression
 }
 
-async fn advanced_metric_query(State(state): State<Arc<AppState>>,
-                               Json(input_query): Json<InputAdvancedMetricQuery>) -> ServerResult<Response> {
+async fn metric_query(State(state): State<Arc<AppState>>,
+                      Json(input_query): Json<InputMetricQuery>) -> ServerResult<Response> {
     let query = MetricQuery::new(input_query.time_range, input_query.expression);
 
     let value = if let Some(duration) = input_query.duration {

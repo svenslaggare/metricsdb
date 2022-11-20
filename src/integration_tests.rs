@@ -584,8 +584,8 @@ fn test_ratio_sum2() {
                 .with_output_filter(
                     FilterExpression::Compare {
                         operation: CompareOperation::GreaterThan,
-                        left: Box::new(FilterExpression::Transform(TransformExpression::InputDenominator)),
-                        right: Box::new(FilterExpression::Transform(TransformExpression::Value(10000.0)))
+                        left: Box::new(FilterExpression::Value(TransformExpression::InputDenominator)),
+                        right: Box::new(FilterExpression::Value(TransformExpression::Value(10000.0)))
                     }
                 )
             ,

@@ -139,7 +139,6 @@ pub enum MetricError {
     FailedToSaveSecondaryTag(std::io::Error),
     FailedToLoadSecondaryTag(std::io::Error),
     FailedToCreateMetric(std::io::Error),
-    FailedToAllocateSubBlock,
     InvalidTimeOrder,
     TooLargeCount
 }

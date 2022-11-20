@@ -13,7 +13,6 @@ pub enum MetricsEngineError {
     MetricNotFound,
     WrongMetricType,
     UnexpectedResult,
-    InvalidQueryInput,
     Metric(MetricError)
 }
 
