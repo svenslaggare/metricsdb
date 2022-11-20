@@ -83,9 +83,9 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
                     }
                     (OperationResult::GroupValues(left), OperationResult::GroupValues(right)) => {
                         let left = group_map(left);
-                        let left_groups = FnvHashSet::from_iter(left.keys());
+                        let left_groups = group_keys(&left);
                         let right = group_map(right);
-                        let right_groups = FnvHashSet::from_iter(right.keys());
+                        let right_groups = group_keys(&right);
 
                         let transformed_values = left_groups.intersection(&right_groups)
                             .map(|&group| (
@@ -216,9 +216,9 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                     }
                     (OperationResult::GroupTimeValues(left), OperationResult::GroupTimeValues(right)) => {
                         let left = group_map(left);
-                        let left_groups = FnvHashSet::from_iter(left.keys());
+                        let left_groups = group_keys(&left);
                         let right = group_map(right);
-                        let right_groups = FnvHashSet::from_iter(right.keys());
+                        let right_groups = group_keys(&right);
 
                         let transformed_values = left_groups.intersection(&right_groups)
                             .map(|&group| {
@@ -287,12 +287,11 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                         let mut group_results = Vec::new();
                         for window_index in 0..num_windows {
                             let time = transformed_arguments[0][&group][window_index].0;
-                            let mut this_window_transformed_arguments = Vec::new();
-                            for windows_argument in &transformed_arguments {
-                                if let Some(value) = windows_argument[&group][window_index].1 {
-                                    this_window_transformed_arguments.push(value);
-                                }
-                            }
+                            let this_window_transformed_arguments = transformed_arguments
+                                .iter()
+                                .map(|windows_argument| windows_argument[&group][window_index].1)
+                                .flatten()
+                                .collect::<Vec<_>>();
 
                             if this_window_transformed_arguments.len() == num_arguments {
                                 group_results.push((time, function.apply(&this_window_transformed_arguments)));
@@ -312,12 +311,11 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
                     let mut results = Vec::new();
                     for window_index in 0..num_windows {
                         let time = transformed_arguments[0][window_index].0;
-                        let mut this_window_transformed_arguments = Vec::new();
-                        for windows_argument in &transformed_arguments {
-                            if let Some(value) = windows_argument[window_index].1 {
-                                this_window_transformed_arguments.push(value);
-                            }
-                        }
+                        let this_window_transformed_arguments = transformed_arguments
+                            .iter()
+                            .map(|windows_argument| windows_argument[window_index].1)
+                            .flatten()
+                            .collect::<Vec<_>>();
 
                         if this_window_transformed_arguments.len() == num_arguments {
                             results.push((time, function.apply(&this_window_transformed_arguments)));
@@ -435,6 +433,10 @@ impl MetricQueryable for MetricsEngine {
 
 fn group_map<T>(values: Vec<(String, T)>) -> FnvHashMap<String, T> {
     FnvHashMap::from_iter(values.into_iter())
+}
+
+fn group_keys<T>(map: &FnvHashMap<String, T>) -> FnvHashSet<&String> {
+    FnvHashSet::from_iter(map.keys())
 }
 
 fn get_overlapping_groups<T>(groups: &[FnvHashMap<String, T>]) -> FnvHashSet<String> {
