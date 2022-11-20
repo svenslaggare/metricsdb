@@ -9,11 +9,9 @@ use fnv::FnvBuildHasher;
 use serde::{Deserialize, Serialize};
 
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError, MetricsEngineResult};
-
 use crate::engine::querying;
 use crate::engine::querying::MetricQuery;
 use crate::metric::common::{CountInput, GenericMetric};
-
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
