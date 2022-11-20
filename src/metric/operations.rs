@@ -162,15 +162,15 @@ impl<T: StreamingOperation<f64>> StreamingRatioValue<T> {
     }
 }
 
-impl<T: StreamingOperation<f64>> StreamingOperation<Ratio, f64> for StreamingRatioValue<T> {
+impl<T: StreamingOperation<f64>> StreamingOperation<Ratio, ExpressionValue> for StreamingRatioValue<T> {
     fn add(&mut self, value: Ratio) {
         if let Some(value) = value.value() {
             self.inner.add(value);
         }
     }
 
-    fn value(&self) -> Option<f64> {
-        self.inner.value()
+    fn value(&self) -> Option<ExpressionValue> {
+        Some(ExpressionValue::Float(self.inner.value()?))
     }
 
     fn merge(&mut self, other: Self) {
@@ -510,40 +510,43 @@ impl<T: StreamingOperation<f64>> StreamingOperation<f64> for StreamingTransformO
     }
 }
 
-pub struct StreamingFilterOperation<TInput, TOp> {
+pub struct StreamingFilterOperation<TInput, TOutput, TOp> {
     operation: FilterExpression,
     inner: TOp,
-    _phantom: PhantomData<TInput>
+    _phantom1: PhantomData<TInput>,
+    _phantom2: PhantomData<TOutput>
 }
 
-impl<TInput, TOp: StreamingOperation<TInput, f64>> StreamingFilterOperation<TInput, TOp> {
-    pub fn new(operation: FilterExpression, inner: TOp) -> StreamingFilterOperation<TInput, TOp> {
+impl<TInput, TOutput, TOp: StreamingOperation<TInput, TOutput>> StreamingFilterOperation<TInput, TOutput, TOp> {
+    pub fn new(operation: FilterExpression, inner: TOp) -> StreamingFilterOperation<TInput, TOutput, TOp> {
         StreamingFilterOperation {
             operation,
             inner,
-            _phantom: Default::default()
+            _phantom1: Default::default(),
+            _phantom2: Default::default(),
         }
     }
 }
 
-impl<TInput, TOp: StreamingOperation<TInput, f64> + Default> StreamingFilterOperation<TInput, TOp> {
-    pub fn from_default(operation: FilterExpression) -> StreamingFilterOperation<TInput, TOp> {
+impl<TInput, TOutput, TOp: StreamingOperation<TInput, TOutput> + Default> StreamingFilterOperation<TInput, TOutput, TOp> {
+    pub fn from_default(operation: FilterExpression) -> StreamingFilterOperation<TInput, TOutput, TOp> {
         StreamingFilterOperation {
             operation,
             inner: Default::default(),
-            _phantom: Default::default()
+            _phantom1: Default::default(),
+            _phantom2: Default::default()
         }
     }
 }
 
-impl<TInput: ToExpressionValue, TOp: StreamingOperation<TInput, f64>> StreamingOperation<TInput, f64> for StreamingFilterOperation<TInput, TOp> {
+impl<TInput: ToExpressionValue, TOutput, TOp: StreamingOperation<TInput, TOutput>> StreamingOperation<TInput, TOutput> for StreamingFilterOperation<TInput, TOutput, TOp> {
     fn add(&mut self, value: TInput) {
         if self.operation.evaluate(&value.to_value()).unwrap_or(false) {
             self.inner.add(value);
         }
     }
 
-    fn value(&self) -> Option<f64> {
+    fn value(&self) -> Option<TOutput> {
         self.inner.value()
     }
 

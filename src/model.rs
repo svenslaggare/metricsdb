@@ -105,16 +105,16 @@ impl Query {
         new
     }
 
-    pub fn apply_output_transform(&self, value: f64) -> Option<f64> {
+    pub fn apply_output_transform(&self, value: ExpressionValue) -> Option<f64> {
         if let Some(filter) = &self.output_filter {
-            if !filter.evaluate(&ExpressionValue::Float(value)).unwrap_or(false) {
+            if !filter.evaluate(&value).unwrap_or(false) {
                 return None;
             }
         }
 
         match &self.output_transform {
-            Some(operation) => operation.evaluate(&ExpressionValue::Float(value)),
-            None => Some(value)
+            Some(operation) => operation.evaluate(&value),
+            None => value.float()
         }
     }
 }

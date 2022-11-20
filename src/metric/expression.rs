@@ -13,11 +13,27 @@ impl ExpressionValue {
             ExpressionValue::Ratio(value) => value.value()
         }
     }
+
+    pub fn numerator(&self) -> Option<f64> {
+        match self {
+            ExpressionValue::Ratio(ratio) => Some(ratio.numerator() as f64),
+            _ => None
+        }
+    }
+
+    pub fn denominator(&self) -> Option<f64> {
+        match self {
+            ExpressionValue::Ratio(ratio) => Some(ratio.denominator() as f64),
+            _ => None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum TransformExpression {
     InputValue,
+    InputNumerator,
+    InputDenominator,
     Value(f64),
     Arithmetic { operation: ArithmeticOperation, left: Box<TransformExpression>, right: Box<TransformExpression> },
     Function { function: Function, arguments: Vec<TransformExpression> }
@@ -27,6 +43,8 @@ impl TransformExpression {
     pub fn evaluate(&self, input: &ExpressionValue) -> Option<f64> {
         match self {
             TransformExpression::InputValue => input.float(),
+            TransformExpression::InputNumerator => input.numerator(),
+            TransformExpression::InputDenominator => input.denominator(),
             TransformExpression::Value(value) => Some(*value),
             TransformExpression::Arithmetic { operation, left, right } => {
                 let left = left.evaluate(input)?;

@@ -5,6 +5,7 @@ use crate::metric::common::{CountInput, GenericMetric, PrimaryTagMetric, Primary
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::metric::{metric_operations, OperationResult};
+use crate::metric::expression::ExpressionValue;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE, TimeRange};
 use crate::storage::file::FileMetricStorage;
@@ -67,7 +68,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
             }
 
             let streaming_operation = metric_operations::merge_operations(streaming_operations);
-            query.apply_output_transform(streaming_operation.value()?)
+            query.apply_output_transform(ExpressionValue::Float(streaming_operation.value()?))
         };
 
         match &query.group_by {
@@ -127,7 +128,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
 
             metric_operations::extract_operations_in_windows(
                 metric_operations::merge_windowing(primary_tags_windowing),
-                |value| query.apply_output_transform(value?),
+                |value| query.apply_output_transform(ExpressionValue::Float(value?)),
                 query.remove_empty_datapoints
             )
         };

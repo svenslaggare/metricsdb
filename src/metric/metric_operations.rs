@@ -314,9 +314,9 @@ impl<T> MetricWindowing<T> {
 
 pub fn extract_operations_in_windows<
     T: StreamingOperation<TInput, TOutput>,
-    F: Fn(Option<TOutput>) -> Option<TOutput>,
-    TInput, TOutput
->(windowing: MetricWindowing<T>, transform_output: F, remove_empty: bool) -> Vec<(f64, Option<TOutput>)> {
+    F: Fn(Option<TOutput>) -> Option<TResult>,
+    TInput, TOutput, TResult
+>(windowing: MetricWindowing<T>, transform_output: F, remove_empty: bool) -> Vec<(f64, Option<TResult>)> {
     windowing.windows
         .iter()
         .enumerate()

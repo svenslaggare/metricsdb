@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use crate::metric::common::{GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
-use crate::metric::operations::{StreamingApproxPercentileTDigest, StreamingAverage, StreamingFilterOperation, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation};
+use crate::metric::operations::{StreamingApproxPercentileTDigest, StreamingAverage, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation, StreamingFilterOperation};
 use crate::metric::{metric_operations, OperationResult};
+use crate::metric::expression::ExpressionValue;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE};
 use crate::storage::file::FileMetricStorage;
@@ -25,13 +26,13 @@ macro_rules! apply_operation {
                     let transform = transform.clone();
                     $self.operation(
                         $query,
-                        |stats| StreamingFilterOperation::<f64, _>::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))),
+                        |stats| StreamingFilterOperation::<f64, f64, _>::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))),
                         $require_stats
                     )
                 }
                 (Some(filter), None) => {
                     let filter = filter.clone();
-                    $self.operation($query, |stats| StreamingFilterOperation::<f64, $T>::new(filter.clone(), $create(stats)), $require_stats)
+                    $self.operation($query, |stats| StreamingFilterOperation::<f64, f64, $T>::new(filter.clone(), $create(stats)), $require_stats)
                 }
                 (None, Some(transform)) => {
                     let transform = transform.clone();
@@ -55,13 +56,13 @@ macro_rules! apply_operation_in_window {
                     $self.operation_in_window(
                         $query,
                         $duration,
-                        |stats| StreamingFilterOperation::<f64, _>::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))),
+                        |stats| StreamingFilterOperation::<f64, f64, _>::new(filter.clone(), StreamingTransformOperation::<$T>::new(transform.clone(), $create(stats))),
                         $require_stats
                     )
                 }
                 (Some(filter), None) => {
                     let filter = filter.clone();
-                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<f64, $T>::new(filter.clone(), $create(stats)), $require_stats)
+                    $self.operation_in_window($query, $duration, |stats| StreamingFilterOperation::<f64, f64, $T>::new(filter.clone(), $create(stats)), $require_stats)
                 }
                 (None, Some(transform)) => {
                     let transform = transform.clone();
@@ -147,7 +148,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
             }
 
             let streaming_operation = metric_operations::merge_operations(streaming_operations);
-            query.apply_output_transform(streaming_operation.value()?)
+            query.apply_output_transform(ExpressionValue::Float(streaming_operation.value()?))
         };
 
         match &query.group_by {
@@ -238,7 +239,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
             metric_operations::extract_operations_in_windows(
                 metric_operations::merge_windowing(primary_tags_windowing),
-                |value| query.apply_output_transform(value?),
+                |value| query.apply_output_transform(ExpressionValue::Float(value?)),
                 query.remove_empty_datapoints
             )
         };
@@ -331,14 +332,6 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
     }
 
     fn percentile(&self, query: Query, percentile: i32) -> OperationResult {
-        // let create = |stats: Option<&TimeRangeStatistics<f32>>| {
-        //     let stats = stats.unwrap();
-        //     let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
-        //     StreamingApproxPercentileHistogram::from_stats(&stats, percentile)
-        // };
-        //
-        // apply_operation!(self, StreamingApproxPercentileHistogram, query, create, true)
-
         let create = |_: Option<&TimeRangeStatistics<f32>>| {
             StreamingApproxPercentileTDigest::new(percentile)
         };
@@ -363,14 +356,6 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
     }
 
     fn percentile_in_window(&self, query: Query, duration: Duration, percentile: i32) -> OperationResult {
-        // let create = |stats: Option<&TimeRangeStatistics<f64>>| {
-        //     let stats = stats.unwrap();
-        //     let stats = TimeRangeStatistics::new(stats.count, stats.min() as f64, stats.max() as f64);
-        //     StreamingApproxPercentileHistogram::from_stats(&stats, percentile)
-        // };
-        //
-        // apply_operation_in_window!(self, StreamingApproxPercentileHistogram, query, duration, create, true)
-
         let create = |_: Option<&TimeRangeStatistics<f64>>| {
             StreamingApproxPercentileTDigest::new(percentile)
         };

@@ -12,7 +12,7 @@ use crate::engine::querying::{MetricQuery, MetricQueryExpression};
 use crate::metric::common::GenericMetric;
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
-use crate::metric::expression::{ArithmeticOperation, Function, TransformExpression};
+use crate::metric::expression::{ArithmeticOperation, CompareOperation, FilterExpression, Function, TransformExpression};
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
 use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
@@ -219,8 +219,7 @@ fn test_gauge_95th1() {
     }
 
     assert_eq!(
-        // Some(0.8005568351587988),
-        Some(0.8006393909454346),
+        Some(0.8006128556989215),
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value()
     );
 }
@@ -433,8 +432,7 @@ fn test_gauge_primary_tag_95th1() {
     }
 
     assert_abs_diff_eq!(
-        // 0.8006655905325116,
-        0.8005379579702949,
+        0.8006199979022869,
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value().unwrap_or(0.0),
         epsilon = 1e-5
     );
@@ -544,6 +542,55 @@ fn test_ratio_sum1() {
     assert_eq!(
         Some(0.4689526633778615),
         metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
+    );
+}
+
+#[test]
+fn test_ratio_sum2() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut metric = DefaultRatioMetric::new(temp_metric_data.path()).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(
+            SAMPLE_DATA.times[index],
+            RatioInput(CountInput(if SAMPLE_DATA.values[index] > 0.7 {1} else {0}), CountInput(1)),
+            Vec::new()
+        ).unwrap();
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(
+            vec![
+                (1654596500.0, Some(1.0)),
+                (1654597000.0, Some(1.0)),
+                (1654598500.0, Some(0.0)),
+                (1654599500.0, Some(0.0)),
+                (1654600000.0, Some(0.0)),
+                (1654600500.0, Some(0.0)),
+                (1654601500.0, Some(0.415959418593308)),
+                (1654602500.0, Some(1.0))
+            ]
+        ),
+        metric.sum_in_window(
+            Query::new(TimeRange::new(start_time, end_time))
+                .with_output_filter(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::Transform(TransformExpression::InputDenominator)),
+                        right: Box::new(FilterExpression::Transform(TransformExpression::Value(10000.0)))
+                    }
+                )
+            ,
+            Duration::from_secs_f64(500.0),
+        ).time_values()
     );
 }
 
