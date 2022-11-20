@@ -76,36 +76,18 @@ impl MetricsEngine {
     }
 
     pub fn add_gauge_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        let _guard = self.create_lock.lock().unwrap();
-        if self.metrics.contains_key(name) {
-            return Err(MetricsEngineError::MetricAlreadyExists);
-        }
-
-        self.metrics.insert(
-            name.to_string(),
-            Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)
-        );
-
-        self.save_defined_metrics()?;
-        Ok(())
+        self.add_metric(name, |name| Ok(Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)))
     }
 
     pub fn add_count_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        let _guard = self.create_lock.lock().unwrap();
-        if self.metrics.contains_key(name) {
-            return Err(MetricsEngineError::MetricAlreadyExists);
-        }
-
-        self.metrics.insert(
-            name.to_string(),
-            Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)
-        );
-
-        self.save_defined_metrics()?;
-        Ok(())
+        self.add_metric(name, |name| Ok(Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)))
     }
 
     pub fn add_ratio_metric(&self, name: &str) -> MetricsEngineResult<()> {
+        self.add_metric(name, |name| Ok(Metric::ratio(DefaultRatioMetric::new(&self.base_path.join(name))?)))
+    }
+
+    fn add_metric(&self, name: &str, create: impl Fn(&str) -> MetricsEngineResult<ArcMetric>) -> MetricsEngineResult<()> {
         let _guard = self.create_lock.lock().unwrap();
         if self.metrics.contains_key(name) {
             return Err(MetricsEngineError::MetricAlreadyExists);
@@ -113,7 +95,7 @@ impl MetricsEngine {
 
         self.metrics.insert(
             name.to_string(),
-            Metric::ratio(DefaultRatioMetric::new(&self.base_path.join(name))?)
+            create(name)?
         );
 
         self.save_defined_metrics()?;
