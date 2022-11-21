@@ -7,19 +7,34 @@ use serde::Deserialize;
 use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
 use crate::metric::{GroupTimeValues, GroupValues, OperationResult, TimeValues};
-use crate::metric::expression::{ArithmeticOperation, Function};
+use crate::metric::expression::{ArithmeticOperation, CompareOperation, ExpressionValue, FilterExpression, Function};
 use crate::model::{Query, TimeRange};
 
 pub struct MetricQuery {
     pub time_range: TimeRange,
-    pub expression: MetricQueryExpression
+    pub expression: MetricQueryExpression,
+    pub output_filter: Option<FilterExpression>
 }
 
 impl MetricQuery {
     pub fn new(time_range: TimeRange, expression: MetricQueryExpression) -> MetricQuery {
         MetricQuery {
             time_range,
-            expression
+            expression,
+            output_filter: None
+        }
+    }
+
+    pub fn apply_filter(output_filter: Option<&FilterExpression>, value: Option<f64>) -> Option<f64> {
+        let value = value?;
+        if let Some(output_filter) = output_filter {
+            if output_filter.evaluate(&ExpressionValue::Float(value)).unwrap_or(false) {
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            Some(value)
         }
     }
 }
@@ -161,7 +176,22 @@ pub fn query<T: MetricQueryable>(engine: &T, query: MetricQuery) -> MetricsEngin
         values
     }
 
-    evaluate(engine, query.time_range, query.expression)
+    let output_filter = query.output_filter;
+    match evaluate(engine, query.time_range, query.expression)? {
+        OperationResult::Value(value) => Ok(OperationResult::Value(MetricQuery::apply_filter(output_filter.as_ref(), value))),
+        OperationResult::GroupValues(values) => {
+            Ok(
+                OperationResult::GroupValues(
+                    values
+                        .into_iter()
+                        .map(|(group, value)| (group, MetricQuery::apply_filter(output_filter.as_ref(), value)))
+                        .filter(|(_, value)| value.is_some())
+                        .collect()
+                )
+            )
+        },
+        _ => { Err(MetricsEngineError::UnexpectedResult) }
+    }
 }
 
 pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, duration: Duration) -> MetricsEngineResult<OperationResult> {
@@ -349,8 +379,12 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
         time_values.iter().map(|(time, _)| (*time, constant)).collect()
     }
 
-    fn filter_time_values(time_values: TimeValues) -> TimeValues {
-        time_values.into_iter().filter(|(_, value)| value.is_some()).collect()
+    fn filter_time_values(output_filter: Option<&FilterExpression>, time_values: TimeValues) -> TimeValues {
+        time_values
+            .into_iter()
+            .map(|(time, value)| (time, MetricQuery::apply_filter(output_filter, value)))
+            .filter(|(_, value)| value.is_some())
+            .collect()
     }
 
     fn sorted_time_group_values(mut values: GroupTimeValues) -> GroupTimeValues {
@@ -358,14 +392,15 @@ pub fn query_in_window<T: MetricQueryable>(engine: &T, query: MetricQuery, durat
         values
     }
 
+    let output_filter = query.output_filter;
     match evaluate(engine, query.time_range, duration, query.expression)? {
-        OperationResult::TimeValues(time_values) => Ok(OperationResult::TimeValues(filter_time_values(time_values))),
+        OperationResult::TimeValues(time_values) => Ok(OperationResult::TimeValues(filter_time_values(output_filter.as_ref(), time_values))),
         OperationResult::GroupTimeValues(group_time_values) => {
             Ok(
                 OperationResult::GroupTimeValues(
                     group_time_values
                         .into_iter()
-                        .map(|(group, time_values)| (group, filter_time_values(time_values)))
+                        .map(|(group, time_values)| (group, filter_time_values(output_filter.as_ref(), time_values)))
                         .filter(|(_, values)| !values.is_empty())
                         .collect()
                 )
@@ -539,7 +574,8 @@ fn test_query1() {
                     operation: ArithmeticOperation::Multiply,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
-                }
+                },
+                output_filter: None
             }
         ).ok()
     )
@@ -564,10 +600,67 @@ fn test_query2() {
                         MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
                         MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
                     ]
-                }
+                },
+                output_filter: None
             }
         ).ok()
     )
+}
+
+#[test]
+fn test_query3() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::Value(Some(2.0))),
+        ("m2".to_owned(), OperationResult::Value(Some(4.0)))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::Value(None)),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
+                },
+                output_filter: Some(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::input_value()),
+                        right: Box::new(FilterExpression::value(5.0))
+                    }
+                )
+            }
+        ).ok()
+    );
+
+    assert_eq!(
+        Some(OperationResult::Value(Some(4.0))),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Function {
+                    function: Function::Max,
+                    arguments: vec![
+                        MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
+                        MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
+                    ]
+                },
+                output_filter: Some(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::input_value()),
+                        right: Box::new(FilterExpression::value(3.0))
+                    }
+                )
+            }
+        ).ok()
+    );
 }
 
 #[test]
@@ -587,7 +680,8 @@ fn test_query_group1() {
                     operation: ArithmeticOperation::Add,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
-                }
+                },
+                output_filter: None
             }
         ).ok()
     )
@@ -609,7 +703,8 @@ fn test_query_group2() {
                     operation: ArithmeticOperation::Multiply,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Value(2.0))
-                }
+                },
+                output_filter: None
             }
         ).ok()
     )
@@ -634,10 +729,41 @@ fn test_query_group3() {
                         MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
                         MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
                     ]
-                }
+                },
+                output_filter: None
             }
         ).ok()
     )
+}
+
+
+#[test]
+fn test_query_group4() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(6.0))])),
+        query(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Multiply,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Value(2.0))
+                },
+                output_filter: Some(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::input_value()),
+                        right: Box::new(FilterExpression::value(5.0))
+                    }
+                )
+            }
+        ).ok()
+    );
 }
 
 #[test]
@@ -657,7 +783,8 @@ fn test_query_in_window1() {
                     operation: ArithmeticOperation::Add,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
-                }
+                },
+                output_filter: None
             },
             Duration::from_secs_f64(1.0)
         ).ok()
@@ -680,7 +807,8 @@ fn test_query_in_window2() {
                     operation: ArithmeticOperation::Multiply,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Value(2.0))
-                }
+                },
+                output_filter: None
             },
             Duration::from_secs_f64(1.0)
         ).ok()
@@ -706,12 +834,45 @@ fn test_query_in_window3() {
                         MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
                         MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
                     ]
-                }
+                },
+                output_filter: None
             },
             Duration::from_secs_f64(1.0)
         ).ok()
     )
 }
+
+#[test]
+fn test_query_in_window4() {
+    let engine = TestMetricsEngine::new(vec![
+        ("m1".to_owned(), OperationResult::TimeValues(vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)])),
+        ("m2".to_owned(), OperationResult::TimeValues(vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]))
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::TimeValues(vec![(2.0, Some(8.0))])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Add,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                },
+                output_filter: Some(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::input_value()),
+                        right: Box::new(FilterExpression::value(7.0))
+                    }
+                )
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    );
+}
+
 
 #[test]
 fn test_query_in_window_group1() {
@@ -745,7 +906,8 @@ fn test_query_in_window_group1() {
                     operation: ArithmeticOperation::Add,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
-                }
+                },
+                output_filter: None
             },
             Duration::from_secs_f64(1.0)
         ).ok()
@@ -777,7 +939,8 @@ fn test_query_in_window_group2() {
                     operation: ArithmeticOperation::Multiply,
                     left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
                     right: Box::new(MetricQueryExpression::Value(10.0))
-                }
+                },
+                output_filter: None
             },
             Duration::from_secs_f64(1.0)
         ).ok()
@@ -818,7 +981,54 @@ fn test_query_in_window_group3() {
                         MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() },
                         MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() }
                     ]
-                }
+                },
+                output_filter: None
+            },
+            Duration::from_secs_f64(1.0)
+        ).ok()
+    )
+}
+
+#[test]
+fn test_query_in_window_group4() {
+    let engine = TestMetricsEngine::new(vec![
+        (
+            "m1".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+            ])
+        ),
+        (
+            "m2".to_owned(),
+            OperationResult::GroupTimeValues(vec![
+                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+            ])
+        ),
+    ]);
+
+    assert_eq!(
+        Some(OperationResult::GroupTimeValues(vec![
+            ("t1".to_owned(), vec![(2.0, Some(8.0))]),
+            ("t2".to_owned(), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
+        ])),
+        query_in_window(
+            &engine,
+            MetricQuery {
+                time_range: TimeRange::new(0.0, 1.0),
+                expression: MetricQueryExpression::Arithmetic {
+                    operation: ArithmeticOperation::Add,
+                    left: Box::new(MetricQueryExpression::Average { metric: "m1".to_string(), query: Query::placeholder() }),
+                    right: Box::new(MetricQueryExpression::Average { metric: "m2".to_string(), query: Query::placeholder() })
+                },
+                output_filter: Some(
+                    FilterExpression::Compare {
+                        operation: CompareOperation::GreaterThan,
+                        left: Box::new(FilterExpression::input_value()),
+                        right: Box::new(FilterExpression::value(7.0))
+                    }
+                )
             },
             Duration::from_secs_f64(1.0)
         ).ok()
