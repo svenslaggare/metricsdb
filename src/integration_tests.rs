@@ -53,7 +53,7 @@ fn test_gauge_average1() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.667791913241474),
         metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -78,7 +78,7 @@ fn test_gauge_average2() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.6676946286179699),
         metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -103,7 +103,7 @@ fn test_gauge_average3() {
     }
 
     assert_eq!(
-        Some(0.6676758207088794),
+        Some(0.6676941904100635),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::And(vec![tags_list[0].clone()]))
@@ -129,7 +129,7 @@ fn test_gauge_average4() {
     }
 
     assert_eq!(
-        Some(0.814266989356846),
+        Some(0.8143444467992389),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_input_transform(TransformExpression::Function { function: Function::Sqrt, arguments: vec![TransformExpression::InputValue] })
@@ -156,20 +156,20 @@ fn test_gauge_average5() {
 
     assert_eq!(
         Some(vec![
-            (1654596000.0, Some(0.7810451562759174)),
-            (1654596500.0, Some(0.798498850655144)),
-            (1654597000.0, Some(0.7795522142153012)),
-            (1654597500.0, Some(0.7289274156650085)),
-            (1654598000.0, Some(0.6592202344433357)),
-            (1654598500.0, Some(0.5868039118632926)),
-            (1654599000.0, Some(0.5303680305548479)),
-            (1654599500.0, Some(0.5027029820642929)),
-            (1654600000.0, Some(0.5116486969877181)),
-            (1654600500.0, Some(0.5541196308760059)),
-            (1654601000.0, Some(0.6199090911265585)),
-            (1654601500.0, Some(0.6936228376297285)),
-            (1654602000.0, Some(0.7563260559193605)),
-            (1654602500.0, Some(0.7929676963694573))
+            (1654596000.0, Some(0.7810616929429516)),
+            (1654596500.0, Some(0.7984125255297858)),
+            (1654597000.0, Some(0.7794862563100798)),
+            (1654597500.0, Some(0.7288043881887649)),
+            (1654598000.0, Some(0.6590226288448248)),
+            (1654598500.0, Some(0.5867395178973674)),
+            (1654599000.0, Some(0.5302283972157132)),
+            (1654599500.0, Some(0.5026470303535462)),
+            (1654600000.0, Some(0.5116417237243929)),
+            (1654600500.0, Some(0.554182909562916)),
+            (1654601000.0, Some(0.6203749242122579)),
+            (1654601500.0, Some(0.693674767847678)),
+            (1654602000.0, Some(0.7563903743624687)),
+            (1654602500.0, Some(0.7929651886075586))
         ]),
         metric.average_in_window(
             Query::new(TimeRange::new(start_time, end_time)),
@@ -219,7 +219,7 @@ fn test_gauge_95th1() {
     }
 
     assert_eq!(
-        Some(0.8006128556989215),
+        Some(0.8006096125819039),
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value()
     );
 }
@@ -245,8 +245,8 @@ fn test_gauge_group_by_average1() {
 
     assert_eq!(
         OperationResult::GroupValues(vec![
-            ("T1".to_owned(), Some(0.6676758207088794)),
-            ("T2".to_owned(), Some(0.6676688100408572))
+            ("T1".to_owned(), Some(0.6676941904100635)),
+            ("T2".to_owned(), Some(0.6676950667588899))
         ]),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
@@ -278,8 +278,8 @@ fn test_gauge_group_by_average2() {
 
     assert_eq!(
         OperationResult::GroupValues(vec![
-            ("T1".to_owned(), Some(0.6676758207088794)),
-            ("T2".to_owned(), Some(0.6676688100408572))
+            ("T1".to_owned(), Some(0.6677078367421156)),
+            ("T2".to_owned(), Some(0.6676991150199966))
         ]),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
@@ -312,7 +312,7 @@ fn test_gauge_reload1() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.667791913241474),
         metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -339,7 +339,7 @@ fn test_gauge_primary_tag_average1() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.6677034751310084),
         metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -366,7 +366,7 @@ fn test_gauge_primary_tag_average2() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.6677034751310084),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
@@ -402,7 +402,7 @@ fn test_gauge_auto_primary_tag_average1() {
     );
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.6677034751310084),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
@@ -432,7 +432,7 @@ fn test_gauge_primary_tag_95th1() {
     }
 
     assert_abs_diff_eq!(
-        0.8006199979022869,
+        0.8004917040615059,
         metric.percentile(Query::new(TimeRange::new(start_time, end_time)), 95).value().unwrap_or(0.0),
         epsilon = 1e-5
     );
@@ -456,7 +456,7 @@ fn test_count_sum1() {
     }
 
     assert_eq!(
-        Some(144328.0),
+        Some(144322.0),
         metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -483,7 +483,7 @@ fn test_count_primary_tag_sum1() {
     }
 
     assert_eq!(
-        Some(144328.0),
+        Some(144338.0),
         metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -510,7 +510,7 @@ fn test_count_primary_tag_sum2() {
     }
 
     assert_eq!(
-        Some(144328.0),
+        Some(144338.0),
         metric.sum(
             Query::new(TimeRange::new(start_time, end_time))
                 .with_tags_filter(TagsFilter::Or(vec![tags_list[0].clone(), tags_list[1].clone()]))
@@ -540,7 +540,7 @@ fn test_ratio_sum1() {
     }
 
     assert_eq!(
-        Some(0.4689526633778615),
+        Some(0.46893058577347874),
         metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -575,7 +575,7 @@ fn test_ratio_sum2() {
                 (1654599500.0, Some(0.0)),
                 (1654600000.0, Some(0.0)),
                 (1654600500.0, Some(0.0)),
-                (1654601500.0, Some(0.415959418593308)),
+                (1654601500.0, Some(0.41670732897433393)),
                 (1654602500.0, Some(1.0))
             ]
         ),
@@ -621,7 +621,7 @@ fn test_ratio_primary_tag_sum1() {
     }
 
     assert_eq!(
-        Some(0.4689526633778615),
+        Some(0.46898945530629493),
         metric.sum(Query::new(TimeRange::new(start_time, end_time))).value()
     );
 }
@@ -649,12 +649,12 @@ fn test_metrics_engine1() {
     }
 
     assert_eq!(
-        Some(0.6676723153748684),
+        Some(0.6676946286179699),
         metrics_engine.average("cpu", Query::new(TimeRange::new(start_time, end_time))).unwrap().value()
     );
 
     assert_eq!(
-        Some(144328.0),
+        Some(144338.0),
         metrics_engine.sum("perf_events", Query::new(TimeRange::new(start_time, end_time))).unwrap().value()
     );
 }
@@ -680,7 +680,7 @@ fn test_metrics_engine_query1() {
     }
 
     assert_eq!(
-        Some(100.0 * 0.6676723153748684),
+        Some(100.0 * 0.6676946286179699),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),
@@ -722,7 +722,7 @@ fn test_metrics_engine_query2() {
     }
 
     assert_eq!(
-        Some(1.45836899750842),
+        Some(1.4583610857319427),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),
@@ -769,7 +769,7 @@ fn test_metrics_engine_query3() {
     }
 
     assert_eq!(
-        Some(vec![("1".to_owned(), Some(1.458353977970301)), ("2".to_owned(), Some(1.458384017513627))]),
+        Some(vec![("1".to_owned(), Some(1.4584017863792649)), ("2".to_owned(), Some(1.458320393630842))]),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),
@@ -816,7 +816,7 @@ fn test_metrics_engine_query4() {
     }
 
     assert_eq!(
-        Some(vec![("1".to_owned(), Some(0.6676758207088794)), ("2".to_owned(), Some(0.6676688100408572))]),
+        Some(vec![("1".to_owned(), Some(0.6676941904100635)), ("2".to_owned(), Some(0.6676950667588899))]),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),

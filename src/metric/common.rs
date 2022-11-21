@@ -6,16 +6,24 @@ use std::time::Duration;
 use fnv::{FnvHashMap, FnvHashSet};
 
 use serde::{Serialize, Deserialize};
-use crate::metric::OperationResult;
 
+use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, Tag, TagsFilter};
 use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
-pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.0;
-// pub const DEFAULT_DATAPOINT_DURATION: f64 = 0.2;
+pub const DEFAULT_GAUGE_DATAPOINT_DURATION: f64 = 0.2;
+pub const DEFAULT_COUNT_DATAPOINT_DURATION: f64 = 1.0;
+pub const DEFAULT_RATIO_DATAPOINT_DURATION: f64 = 1.0;
+
+#[derive(Serialize, Deserialize)]
+pub enum MetricType {
+    Gauge,
+    Count,
+    Ratio
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CountInput(pub u32);
@@ -61,7 +69,7 @@ pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
-    pub fn new(base_path: &Path) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
+    pub fn new(base_path: &Path, metric_type: MetricType) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
         }
@@ -76,7 +84,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             }
         }
 
-        let config = PrimaryTagsStorageConfig::new();
+        let config = PrimaryTagsStorageConfig::new(metric_type);
         config.save(&base_path.join("config.json"))?;
 
         let mut primary_tags_storage = PrimaryTagsStorage {
@@ -301,11 +309,15 @@ pub struct PrimaryTagsStorageConfig {
 }
 
 impl PrimaryTagsStorageConfig {
-    pub fn new() -> PrimaryTagsStorageConfig {
+    pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
         PrimaryTagsStorageConfig {
             auto_primary_tags: FnvHashSet::default(),
             block_duration: DEFAULT_BLOCK_DURATION,
-            datapoint_duration: DEFAULT_DATAPOINT_DURATION
+            datapoint_duration: match metric_type {
+                MetricType::Gauge => DEFAULT_GAUGE_DATAPOINT_DURATION,
+                MetricType::Count => DEFAULT_COUNT_DATAPOINT_DURATION,
+                MetricType::Ratio => DEFAULT_RATIO_DATAPOINT_DURATION
+            }
         }
     }
 

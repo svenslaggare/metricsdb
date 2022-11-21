@@ -32,7 +32,7 @@ def main():
                 "duration": 10.0,
                 "expression": {
                     "Average": {
-                        "metric": "cpu_usage",
+                        "metric": metric,
                         "query": {
                             "group_by": group_by,
                             # "output_filter": {

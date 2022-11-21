@@ -6,8 +6,8 @@ use crate::storage::memory_file::MemoryFile;
 use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 use crate::storage::MetricStorage;
 
-const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
-const INDEX_MAX_SIZE: usize = 1024 * 1024 * 1024;
+const STORAGE_MAX_SIZE: usize = 128 * 1024 * 1024 * 1024;
+const INDEX_MAX_SIZE: usize = 128 * 1024 * 1024;
 const SYNC_INTERVAL: Duration = Duration::new(2, 0);
 
 pub struct FileMetricStorage<E> {

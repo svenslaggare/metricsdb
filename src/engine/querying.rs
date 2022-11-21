@@ -7,8 +7,11 @@ use serde::Deserialize;
 use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
 use crate::metric::{GroupTimeValues, GroupValues, OperationResult, TimeValues};
-use crate::metric::expression::{ArithmeticOperation, CompareOperation, ExpressionValue, FilterExpression, Function};
+use crate::metric::expression::{ArithmeticOperation, ExpressionValue, FilterExpression, Function};
 use crate::model::{Query, TimeRange};
+
+#[cfg(test)]
+use crate::metric::expression::CompareOperation;
 
 pub struct MetricQuery {
     pub time_range: TimeRange,

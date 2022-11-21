@@ -6,12 +6,10 @@ use std::time::Duration;
 use dashmap::DashMap;
 use fnv::FnvBuildHasher;
 
-use serde::{Deserialize, Serialize};
-
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError, MetricsEngineResult};
 use crate::engine::querying;
 use crate::engine::querying::MetricQuery;
-use crate::metric::common::{CountInput, GenericMetric};
+use crate::metric::common::{CountInput, GenericMetric, MetricType};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
@@ -350,11 +348,4 @@ impl Metric {
             Metric::Ratio(_) => MetricType::Ratio
         }
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum MetricType {
-    Gauge,
-    Count,
-    Ratio
 }

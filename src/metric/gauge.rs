@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{GenericMetric, PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{GenericMetric, MetricType, PrimaryTagMetric, PrimaryTagsStorage};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingApproxPercentileTDigest, StreamingAverage, StreamingMax, StreamingMin, StreamingOperation, StreamingSum, StreamingTransformOperation, StreamingFilterOperation};
 use crate::metric::{metric_operations, OperationResult};
@@ -80,7 +80,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
     pub fn new(base_path: &Path) -> MetricResult<GaugeMetric<TStorage>> {
         Ok(
             GaugeMetric {
-                primary_tags_storage: PrimaryTagsStorage::new(base_path)?
+                primary_tags_storage: PrimaryTagsStorage::new(base_path, MetricType::Gauge)?
             }
         )
     }

@@ -16,8 +16,8 @@ use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use metricsdb::model::{Query, TimeRange};
 
 fn main() {
-    main_gauge();
-    // main_count();
+    // main_gauge();
+    main_count();
     // main_ratio();
     // main_engine();
     // main_engine_existing1();
