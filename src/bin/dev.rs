@@ -281,8 +281,8 @@ fn main_engine() {
 fn main_engine_existing1() {
     let metrics_engine = MetricsEngine::from_existing(&Path::new("server_storage")).unwrap();
 
-    let start_time = 1668874032.213049 - 10.0 * 60.0;
-    let end_time = 1668874032.213049;
+    let start_time = 1669140681.1531835 - 10.0 * 60.0;
+    let end_time = 1669140681.1531835;
 
     let query = Query::new(TimeRange::new(start_time, end_time));
 
@@ -301,6 +301,7 @@ fn main_engine_existing1() {
 
     // let query = query.with_group_by("core".to_owned());
     let query = query.with_group_by(GroupKey::from_ref("host"));
+    // let query = query.with_group_by(GroupKey::from_multi_ref(&["host", "core"]));
     // let query = query.with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]));
     // let query = query.with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0")]));
 

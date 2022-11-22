@@ -1,7 +1,8 @@
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Serializer};
+use serde::ser::SerializeSeq;
 
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
-use crate::metric::tags::TagsFilter;
+use crate::metric::tags::{Tag, TagsFilter};
 use crate::storage::memory_file::MemoryFileError;
 
 pub type Time = u64;
@@ -40,20 +41,42 @@ impl TimeRange {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GroupKey(pub String);
+pub struct GroupKey(pub Vec<String>);
 
 impl GroupKey {
     pub fn from_ref(key: &str) -> GroupKey {
-        GroupKey(key.to_owned())
+        GroupKey(vec![key.to_owned()])
+    }
+
+    pub fn from_multi_ref(keys: &[&str]) -> GroupKey {
+        GroupKey(keys.iter().map(|x| (*x).to_owned()).collect())
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GroupValue(pub String);
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupValue(pub Vec<String>);
 
 impl GroupValue {
     pub fn from_ref(value: &str) -> GroupValue {
-        GroupValue(value.to_owned())
+        GroupValue(vec![value.to_owned()])
+    }
+
+    pub fn from_tags(tags: &Vec<Tag>) -> GroupValue {
+        GroupValue(tags.iter().map(|tag| tag.1.clone()).collect::<Vec<_>>())
+    }
+}
+
+impl Serialize for GroupValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        if self.0.len() == 1 {
+            serializer.serialize_str(&self.0[0])
+        } else {
+            let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+            for part in &self.0 {
+                seq.serialize_element(part)?;
+            }
+            seq.end()
+        }
     }
 }
 

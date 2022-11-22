@@ -34,7 +34,7 @@ def main():
                     "Average": {
                         "metric": metric,
                         "query": {
-                            "group_by": group_by,
+                            "group_by": [group_by],
                             # "output_filter": {
                             #     "Compare": {
                             #         "operation": "GreaterThan",

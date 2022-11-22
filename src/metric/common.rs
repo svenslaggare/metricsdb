@@ -214,8 +214,9 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     pub fn apply_group_by<F: Fn(&TagsFilter) -> T, T>(&self, query: &Query, key: &GroupKey, apply: F) -> Vec<(GroupValue, T)> {
         let mut groups = self.gather_group_values(&query, key)
             .into_iter()
-            .map(|group_value| {
-                let tags_filter = query.tags_filter.clone().add_and_clause(vec![Tag(key.0.to_owned(), group_value.0.clone())]);
+            .map(|group_key_value| {
+                let group_value = GroupValue::from_tags(&group_key_value);
+                let tags_filter = query.tags_filter.clone().add_and_clause(group_key_value);
                 (group_value, apply(&tags_filter))
             })
             .collect::<Vec<_>>();
@@ -224,13 +225,16 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         groups
     }
 
-    fn gather_group_values(&self, query: &Query, key: &GroupKey) -> Vec<GroupValue> {
+    fn gather_group_values(&self, query: &Query, key: &GroupKey) -> Vec<Vec<Tag>> {
         let named_primary_tags = HashSet::from_iter(self.named_primary_tags());
-        let mut group_values = FnvHashSet::default();
+        let mut group_dimensions = key.0.iter().map(|_| FnvHashSet::default()).collect::<Vec<_>>();
 
         let mut try_add_tag = |tag: &Tag| {
-            if tag.0 == key.0 {
-                group_values.insert(GroupValue(tag.1.clone()));
+            for (index, part) in key.0.iter().enumerate() {
+                if part == &tag.0 {
+                    group_dimensions[index].insert(tag.1.clone());
+                    break;
+                }
             }
         };
 
@@ -255,7 +259,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             }
         }
 
-        group_values.into_iter().collect()
+        let group_dimensions = group_dimensions.into_iter().map(|dimension| Vec::from_iter(dimension.into_iter())).collect::<Vec<_>>();
+        let group_values = cartesian_product_groups(&key, group_dimensions);
+
+        group_values
     }
 
     pub fn scheduled(&mut self) {
@@ -388,4 +395,45 @@ impl PrimaryTagsSerialization {
 
         Ok(primary_tags)
     }
+}
+
+fn cartesian_product_groups(group_key: &GroupKey, group_dimensions: Vec<Vec<String>>) -> Vec<Vec<Tag>> {
+    for dimension in &group_dimensions {
+        if dimension.is_empty() {
+            return Vec::new();
+        }
+    }
+
+    let mut group_values = Vec::new();
+
+    let num_dims = group_dimensions.len();
+    let mut dimension_indices = (0..num_dims).map(|_| 0usize).collect::<Vec<_>>();
+
+    'outer:
+    loop {
+        let group_value = dimension_indices
+            .iter()
+            .enumerate()
+            .map(|(dim_index, &index)| Tag::from_ref(&group_key.0[dim_index], &group_dimensions[dim_index][index]))
+            .collect::<Vec<_>>();
+
+        group_values.push(group_value);
+        dimension_indices[num_dims - 1] += 1;
+
+        for dim_index in (0..num_dims).rev() {
+            if dimension_indices[dim_index] == group_dimensions[dim_index].len() {
+                dimension_indices[dim_index] = 0;
+
+                if dim_index != 0 {
+                    dimension_indices[dim_index - 1] += 1;
+                } else {
+                    break 'outer;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    group_values
 }
