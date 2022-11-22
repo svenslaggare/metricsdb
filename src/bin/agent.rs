@@ -31,7 +31,13 @@ async fn main() {
     let mut memory_usage_collector = MemoryUsageCollector::new();
 
     let config = AgentConfig::default();
-    let hostname = gethostname::gethostname().to_str().unwrap().to_owned();
+
+    let arguments = std::env::args().collect::<Vec<_>>();
+    let hostname = if arguments.len() >= 2 {
+        arguments[1].clone()
+    } else {
+        gethostname::gethostname().to_str().unwrap().to_owned()
+    };
 
     let client = reqwest::Client::new();
     loop {
