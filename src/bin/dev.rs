@@ -13,14 +13,14 @@ use metricsdb::metric::expression::{ArithmeticOperation, CompareOperation, Filte
 use metricsdb::metric::gauge::DefaultGaugeMetric;
 use metricsdb::metric::ratio::{DefaultRatioMetric, RatioInput};
 use metricsdb::metric::tags::{PrimaryTag, Tag, TagsFilter};
-use metricsdb::model::{Query, TimeRange};
+use metricsdb::model::{GroupKey, Query, TimeRange};
 
 fn main() {
     // main_gauge();
-    main_count();
+    // main_count();
     // main_ratio();
     // main_engine();
-    // main_engine_existing1();
+    main_engine_existing1();
     // main_engine_existing2();
 }
 
@@ -300,7 +300,7 @@ fn main_engine_existing1() {
     // });
 
     // let query = query.with_group_by("core".to_owned());
-    let query = query.with_group_by("host".to_owned());
+    let query = query.with_group_by(GroupKey::from_ref("host"));
     // let query = query.with_tags_filter(TagsFilter::And(vec![Tag::from_ref("core", "cpu0")]));
     // let query = query.with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0")]));
 
@@ -388,11 +388,11 @@ fn main_engine_existing2() {
                     arguments: vec![
                         MetricQueryExpression::Average {
                             metric: "cpu_usage".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu1"), Tag::from_ref("core", "cpu2")]))
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("host")).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu1"), Tag::from_ref("core", "cpu2")]))
                         },
                         MetricQueryExpression::Average {
                             metric: "cpu_usage".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned()).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0"), Tag::from_ref("core", "cpu1")]))
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("host")).with_tags_filter(TagsFilter::Or(vec![Tag::from_ref("core", "cpu0"), Tag::from_ref("core", "cpu1")]))
                         }
                     ]
                 }
