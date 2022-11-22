@@ -9,6 +9,7 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
         return None;
     }
 
+
     let mut lower = 0;
     let mut upper = storage.len() - 1;
     while lower <= upper {
@@ -17,7 +18,7 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
         if let Some((_, middle_time)) = storage.block_time_range(middle) {
             if time > middle_time {
                 lower = middle + 1;
-            } else if time < middle_time {
+            } else if time < middle_time && middle > 0 {
                 upper = middle - 1;
             } else {
                 break;
