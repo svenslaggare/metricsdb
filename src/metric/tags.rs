@@ -30,7 +30,6 @@ impl Serialize for Tag {
 }
 
 struct TagVisitor;
-
 impl<'de> Visitor<'de> for TagVisitor {
     type Value = Tag;
 

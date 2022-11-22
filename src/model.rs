@@ -1,4 +1,5 @@
-use serde::{Serialize, Deserialize, Serializer};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::de::{Error, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
@@ -40,7 +41,7 @@ impl TimeRange {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupKey(pub Vec<String>);
 
 impl GroupKey {
@@ -53,7 +54,39 @@ impl GroupKey {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct GroupKeyVisitor;
+impl<'de> Visitor<'de> for GroupKeyVisitor {
+    type Value = GroupKey;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("string or array")
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: Error {
+        self.visit_str(&value)
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> where E: Error {
+        Ok(GroupKey::from_ref(value))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+        let mut parts = Vec::new();
+        while let Some(element) = seq.next_element::<String>()? {
+            parts.push(element);
+        }
+
+        Ok(GroupKey(parts))
+    }
+}
+
+impl<'de> Deserialize<'de> for GroupKey {
+    fn deserialize<D>(deserializer: D) -> Result<GroupKey, D::Error> where D: Deserializer<'de> {
+        deserializer.deserialize_any(GroupKeyVisitor)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupValue(pub Vec<String>);
 
 impl GroupValue {

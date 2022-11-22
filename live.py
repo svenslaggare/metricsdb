@@ -11,7 +11,7 @@ def main():
 
     while True:
         # time_now = time.time()
-        time_now = 1668874032.213049
+        time_now = 1669140681.1531835
 
         metric = "cpu_usage"
         # metric = "total_memory"
@@ -34,7 +34,7 @@ def main():
                     "Average": {
                         "metric": metric,
                         "query": {
-                            "group_by": [group_by],
+                            "group_by": group_by,
                             # "output_filter": {
                             #     "Compare": {
                             #         "operation": "GreaterThan",
