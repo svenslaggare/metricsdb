@@ -17,7 +17,7 @@ use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
 use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
-use crate::model::{Query, TimeRange};
+use crate::model::{GroupKey, GroupValue, Query, TimeRange};
 
 #[derive(Deserialize)]
 struct SampleData {
@@ -245,12 +245,12 @@ fn test_gauge_group_by_average1() {
 
     assert_eq!(
         OperationResult::GroupValues(vec![
-            ("T1".to_owned(), Some(0.6676941904100635)),
-            ("T2".to_owned(), Some(0.6676950667588899))
+            (GroupValue::from_ref("T1"), Some(0.6676941904100635)),
+            (GroupValue::from_ref("T2"), Some(0.6676950667588899))
         ]),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_group_by("tag".to_owned())
+                .with_group_by(GroupKey::from_ref("tag"))
         )
     );
 }
@@ -278,12 +278,12 @@ fn test_gauge_group_by_average2() {
 
     assert_eq!(
         OperationResult::GroupValues(vec![
-            ("T1".to_owned(), Some(0.6677078367421156)),
-            ("T2".to_owned(), Some(0.6676991150199966))
+            (GroupValue::from_ref("T1"), Some(0.6677078367421156)),
+            (GroupValue::from_ref("T2"), Some(0.6676991150199966))
         ]),
         metric.average(
             Query::new(TimeRange::new(start_time, end_time))
-                .with_group_by("tag".to_owned())
+                .with_group_by(GroupKey::from_ref("tag"))
         )
     );
 }
@@ -769,7 +769,7 @@ fn test_metrics_engine_query3() {
     }
 
     assert_eq!(
-        Some(vec![("1".to_owned(), Some(1.4584017863792649)), ("2".to_owned(), Some(1.458320393630842))]),
+        Some(vec![(GroupValue::from_ref("1"), Some(1.4584017863792649)), (GroupValue::from_ref("2"), Some(1.458320393630842))]),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),
@@ -778,13 +778,13 @@ fn test_metrics_engine_query3() {
                     left: Box::new(
                         MetricQueryExpression::Average {
                             metric: "cpu1".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned())
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("core"))
                         }
                     ),
                     right: Box::new(
                         MetricQueryExpression::Average {
                             metric: "cpu2".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned())
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("core"))
                         }
                     )
                 }
@@ -816,7 +816,7 @@ fn test_metrics_engine_query4() {
     }
 
     assert_eq!(
-        Some(vec![("1".to_owned(), Some(0.6676941904100635)), ("2".to_owned(), Some(0.6676950667588899))]),
+        Some(vec![(GroupValue::from_ref("1"), Some(0.6676941904100635)), (GroupValue::from_ref("2"), Some(0.6676950667588899))]),
         metrics_engine.query(
             MetricQuery::new(
                 TimeRange::new(start_time, end_time),
@@ -825,11 +825,11 @@ fn test_metrics_engine_query4() {
                     arguments: vec![
                         MetricQueryExpression::Average {
                             metric: "cpu1".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned())
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("core"))
                         },
                         MetricQueryExpression::Average {
                             metric: "cpu2".to_string(),
-                            query: Query::placeholder().with_group_by("core".to_owned())
+                            query: Query::placeholder().with_group_by(GroupKey::from_ref("core"))
                         }
                     ]
                 }

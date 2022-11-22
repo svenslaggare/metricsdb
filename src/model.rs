@@ -1,4 +1,5 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
+
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
 use crate::metric::tags::TagsFilter;
 use crate::storage::memory_file::MemoryFileError;
@@ -38,6 +39,24 @@ impl TimeRange {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupKey(pub String);
+
+impl GroupKey {
+    pub fn from_ref(key: &str) -> GroupKey {
+        GroupKey(key.to_owned())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupValue(pub String);
+
+impl GroupValue {
+    pub fn from_ref(value: &str) -> GroupValue {
+        GroupValue(value.to_owned())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Query {
@@ -47,7 +66,7 @@ pub struct Query {
     pub input_transform: Option<TransformExpression>,
     pub output_filter: Option<FilterExpression>,
     pub output_transform: Option<TransformExpression>,
-    pub group_by: Option<String>,
+    pub group_by: Option<GroupKey>,
     pub remove_empty_datapoints: bool
 }
 
@@ -99,7 +118,7 @@ impl Query {
         new
     }
 
-    pub fn with_group_by(self, key: String) -> Query {
+    pub fn with_group_by(self, key: GroupKey) -> Query {
         let mut new = self;
         new.group_by = Some(key);
         new

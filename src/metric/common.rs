@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, Tag, TagsFilter};
-use crate::model::{MetricError, MetricResult, Query, Tags, TIME_SCALE};
+use crate::model::{GroupKey, GroupValue, MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::MetricStorage;
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
@@ -211,11 +211,11 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         self.tags.insert(primary_tag_key, primary_tag);
     }
 
-    pub fn apply_group_by<F: Fn(&TagsFilter) -> T, T>(&self, query: &Query, key: &str, apply: F) -> Vec<(String, T)> {
+    pub fn apply_group_by<F: Fn(&TagsFilter) -> T, T>(&self, query: &Query, key: &GroupKey, apply: F) -> Vec<(GroupValue, T)> {
         let mut groups = self.gather_group_values(&query, key)
             .into_iter()
             .map(|group_value| {
-                let tags_filter = query.tags_filter.clone().add_and_clause(vec![Tag(key.to_owned(), group_value.clone())]);
+                let tags_filter = query.tags_filter.clone().add_and_clause(vec![Tag(key.0.to_owned(), group_value.0.clone())]);
                 (group_value, apply(&tags_filter))
             })
             .collect::<Vec<_>>();
@@ -224,20 +224,20 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         groups
     }
 
-    fn gather_group_values(&self, query: &Query, key: &str) -> Vec<String> {
+    fn gather_group_values(&self, query: &Query, key: &GroupKey) -> Vec<GroupValue> {
         let named_primary_tags = HashSet::from_iter(self.named_primary_tags());
         let mut group_values = FnvHashSet::default();
 
         let mut try_add_tag = |tag: &Tag| {
-            if tag.0 == key {
-                group_values.insert(tag.1.to_owned());
+            if tag.0 == key.0 {
+                group_values.insert(GroupValue(tag.1.clone()));
             }
         };
 
         for (primary_tag_key, primary_tag) in self.iter() {
             if let Some(tags_filter) = query.tags_filter.apply(&named_primary_tags, primary_tag_key, &primary_tag.tags_index) {
-                if let Some(key_value) = primary_tag_key.named() {
-                    try_add_tag(key_value);
+                if let Some(tag) = primary_tag_key.named() {
+                    try_add_tag(tag);
                 }
 
                 for pattern in primary_tag.tags_index.all_patterns() {
@@ -245,8 +245,8 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
                         for index in 0..Tags::BITS {
                             let index_pattern = 1 << index as Tags;
                             if index_pattern & pattern != 0 {
-                                if let Some(key_value) = primary_tag.tags_index.tags_pattern_to_string(&index_pattern) {
-                                    try_add_tag(key_value);
+                                if let Some(tag) = primary_tag.tags_index.tags_pattern_to_string(&index_pattern) {
+                                    try_add_tag(tag);
                                 }
                             }
                         }

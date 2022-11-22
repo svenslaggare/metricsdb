@@ -11,9 +11,11 @@ pub mod expression;
 use std::fmt::{Display};
 use serde_json::json;
 
+use crate::model::GroupValue;
+
 pub type TimeValues = Vec<(f64, Option<f64>)>;
-pub type GroupValues = Vec<(String, Option<f64>)>;
-pub type GroupTimeValues = Vec<(String, TimeValues)>;
+pub type GroupValues = Vec<(GroupValue, Option<f64>)>;
+pub type GroupTimeValues = Vec<(GroupValue, TimeValues)>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationResult {

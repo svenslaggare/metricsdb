@@ -8,7 +8,7 @@ use crate::engine::engine::MetricsEngine;
 use crate::engine::io::{MetricsEngineError, MetricsEngineResult};
 use crate::metric::{GroupTimeValues, GroupValues, OperationResult, TimeValues};
 use crate::metric::expression::{ArithmeticOperation, ExpressionValue, FilterExpression, Function};
-use crate::model::{Query, TimeRange};
+use crate::model::{GroupValue, Query, TimeRange};
 
 #[cfg(test)]
 use crate::metric::expression::CompareOperation;
@@ -469,16 +469,16 @@ impl MetricQueryable for MetricsEngine {
     }
 }
 
-fn group_map<T>(values: Vec<(String, T)>) -> FnvHashMap<String, T> {
+fn group_map<T>(values: Vec<(GroupValue, T)>) -> FnvHashMap<GroupValue, T> {
     FnvHashMap::from_iter(values.into_iter())
 }
 
-fn group_keys<T>(map: &FnvHashMap<String, T>) -> FnvHashSet<&String> {
+fn group_keys<T>(map: &FnvHashMap<GroupValue, T>) -> FnvHashSet<&GroupValue> {
     FnvHashSet::from_iter(map.keys())
 }
 
-fn get_overlapping_groups<T>(groups: &[FnvHashMap<String, T>]) -> FnvHashSet<String> {
-    let mut overlapping_groups = FnvHashSet::<String>::from_iter(groups[0].keys().cloned());
+fn get_overlapping_groups<T>(groups: &[FnvHashMap<GroupValue, T>]) -> FnvHashSet<GroupValue> {
+    let mut overlapping_groups = FnvHashSet::<GroupValue>::from_iter(groups[0].keys().cloned());
     for group in groups.iter().skip(1) {
         overlapping_groups = FnvHashSet::from_iter(
             overlapping_groups.intersection(&FnvHashSet::from_iter(group.keys().cloned())).cloned()
@@ -669,12 +669,12 @@ fn test_query3() {
 #[test]
 fn test_query_group1() {
     let engine = TestMetricsEngine::new(vec![
-        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))])),
-        ("m2".to_owned(), OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0)), ("v3".to_owned(), Some(5.0))])),
+        ("m1".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v1"), Some(2.0)), (GroupValue::from_ref("v2"), Some(3.0))])),
+        ("m2".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v2"), Some(4.0)), (GroupValue::from_ref("v3"), Some(5.0))])),
     ]);
 
     assert_eq!(
-        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(7.0))])),
+        Some(OperationResult::GroupValues(vec![(GroupValue::from_ref("v2"), Some(7.0))])),
         query(
             &engine,
             MetricQuery {
@@ -693,11 +693,11 @@ fn test_query_group1() {
 #[test]
 fn test_query_group2() {
     let engine = TestMetricsEngine::new(vec![
-        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))]))
+        ("m1".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v1"), Some(2.0)), (GroupValue::from_ref("v2"), Some(3.0))]))
     ]);
 
     assert_eq!(
-        Some(OperationResult::GroupValues(vec![("v1".to_owned(), Some(4.0)), ("v2".to_owned(), Some(6.0))])),
+        Some(OperationResult::GroupValues(vec![(GroupValue::from_ref("v1"), Some(4.0)), (GroupValue::from_ref("v2"), Some(6.0))])),
         query(
             &engine,
             MetricQuery {
@@ -716,12 +716,12 @@ fn test_query_group2() {
 #[test]
 fn test_query_group3() {
     let engine = TestMetricsEngine::new(vec![
-        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))])),
-        ("m2".to_owned(), OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0)), ("v3".to_owned(), Some(5.0))])),
+        ("m1".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v1"), Some(2.0)), (GroupValue::from_ref("v2"), Some(3.0))])),
+        ("m2".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v2"), Some(4.0)), (GroupValue::from_ref("v3"), Some(5.0))])),
     ]);
 
     assert_eq!(
-        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(4.0))])),
+        Some(OperationResult::GroupValues(vec![(GroupValue::from_ref("v2"), Some(4.0))])),
         query(
             &engine,
             MetricQuery {
@@ -743,11 +743,11 @@ fn test_query_group3() {
 #[test]
 fn test_query_group4() {
     let engine = TestMetricsEngine::new(vec![
-        ("m1".to_owned(), OperationResult::GroupValues(vec![("v1".to_owned(), Some(2.0)), ("v2".to_owned(), Some(3.0))]))
+        ("m1".to_owned(), OperationResult::GroupValues(vec![(GroupValue::from_ref("v1"), Some(2.0)), (GroupValue::from_ref("v2"), Some(3.0))]))
     ]);
 
     assert_eq!(
-        Some(OperationResult::GroupValues(vec![("v2".to_owned(), Some(6.0))])),
+        Some(OperationResult::GroupValues(vec![(GroupValue::from_ref("v2"), Some(6.0))])),
         query(
             &engine,
             MetricQuery {
@@ -883,23 +883,23 @@ fn test_query_in_window_group1() {
         (
             "m1".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
-                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+                (GroupValue::from_ref("t1"), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                (GroupValue::from_ref("t2"), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
             ])
         ),
         (
             "m2".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
-                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+                (GroupValue::from_ref("t1"), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                (GroupValue::from_ref("t2"), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
             ])
         ),
     ]);
 
     assert_eq!(
         Some(OperationResult::GroupTimeValues(vec![
-            ("t1".to_owned(), vec![(1.0, Some(6.0)), (2.0, Some(8.0))]),
-            ("t2".to_owned(), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
+            (GroupValue::from_ref("t1"), vec![(1.0, Some(6.0)), (2.0, Some(8.0))]),
+            (GroupValue::from_ref("t2"), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
         ])),
         query_in_window(
             &engine,
@@ -923,16 +923,16 @@ fn test_query_in_window_group2() {
         (
             "m1".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
-                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+                (GroupValue::from_ref("t1"), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                (GroupValue::from_ref("t2"), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
             ])
         )
     ]);
 
     assert_eq!(
         Some(OperationResult::GroupTimeValues(vec![
-            ("t1".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0))]),
-            ("t2".to_owned(), vec![(0.0, Some(100.0)), (1.0, Some(200.0)), (2.0, Some(300.0))]),
+            (GroupValue::from_ref("t1"), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0))]),
+            (GroupValue::from_ref("t2"), vec![(0.0, Some(100.0)), (1.0, Some(200.0)), (2.0, Some(300.0))]),
         ])),
         query_in_window(
             &engine,
@@ -956,23 +956,23 @@ fn test_query_in_window_group3() {
         (
             "m1".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
-                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+                (GroupValue::from_ref("t1"), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                (GroupValue::from_ref("t2"), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
             ])
         ),
         (
             "m2".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
-                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+                (GroupValue::from_ref("t1"), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                (GroupValue::from_ref("t2"), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
             ])
         ),
     ]);
 
     assert_eq!(
         Some(OperationResult::GroupTimeValues(vec![
-            ("t1".to_owned(), vec![(1.0, Some(4.0)), (2.0, Some(5.0))]),
-            ("t2".to_owned(), vec![(1.0, Some(40.0)), (2.0, Some(50.0))]),
+            (GroupValue::from_ref("t1"), vec![(1.0, Some(4.0)), (2.0, Some(5.0))]),
+            (GroupValue::from_ref("t2"), vec![(1.0, Some(40.0)), (2.0, Some(50.0))]),
         ])),
         query_in_window(
             &engine,
@@ -998,23 +998,23 @@ fn test_query_in_window_group4() {
         (
             "m1".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
-                ("t2".to_owned(), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
+                (GroupValue::from_ref("t1"), vec![(0.0, Some(1.0)), (1.0, Some(2.0)), (2.0, Some(3.0)), (3.0, None)]),
+                (GroupValue::from_ref("t2"), vec![(0.0, Some(10.0)), (1.0, Some(20.0)), (2.0, Some(30.0)), (3.0, None)])
             ])
         ),
         (
             "m2".to_owned(),
             OperationResult::GroupTimeValues(vec![
-                ("t1".to_owned(), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
-                ("t2".to_owned(), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
+                (GroupValue::from_ref("t1"), vec![(0.0, None), (1.0, Some(4.0)), (2.0, Some(5.0)), (3.0, Some(6.0))]),
+                (GroupValue::from_ref("t2"), vec![(0.0, None), (1.0, Some(40.0)), (2.0, Some(50.0)), (3.0, Some(60.0))])
             ])
         ),
     ]);
 
     assert_eq!(
         Some(OperationResult::GroupTimeValues(vec![
-            ("t1".to_owned(), vec![(2.0, Some(8.0))]),
-            ("t2".to_owned(), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
+            (GroupValue::from_ref("t1"), vec![(2.0, Some(8.0))]),
+            (GroupValue::from_ref("t2"), vec![(1.0, Some(60.0)), (2.0, Some(80.0))]),
         ])),
         query_in_window(
             &engine,
