@@ -10,7 +10,6 @@ pub trait MetricStorage<E: Copy> {
     fn datapoint_duration(&self) -> u64;
 
     fn len(&self) -> usize;
-    fn has_blocks(&self) -> bool;
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
 
