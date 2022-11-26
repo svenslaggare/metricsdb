@@ -2,7 +2,7 @@ use std::ops::AddAssign;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagMetric, PrimaryTagsStorage};
+use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagMetric, PrimaryTagsStorage, PrimaryTagsStorageConfig};
 use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin, StreamingApproxPercentileTDigest};
 use crate::metric::{metric_operations, OperationResult};
@@ -60,6 +60,14 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
         Ok(
             RatioMetric {
                 primary_tags_storage: PrimaryTagsStorage::new(base_path, MetricType::Ratio)?
+            }
+        )
+    }
+
+    pub fn with_config(base_path: &Path, config: PrimaryTagsStorageConfig) -> MetricResult<RatioMetric<TStorage>> {
+        Ok(
+            RatioMetric {
+                primary_tags_storage: PrimaryTagsStorage::with_config(base_path, config)?
             }
         )
     }

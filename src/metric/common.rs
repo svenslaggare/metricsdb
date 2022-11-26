@@ -72,6 +72,10 @@ pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     pub fn new(base_path: &Path, metric_type: MetricType) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
+        PrimaryTagsStorage::with_config(base_path, PrimaryTagsStorageConfig::new(metric_type))
+    }
+
+    pub fn with_config(base_path: &Path, config: PrimaryTagsStorageConfig) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
         }
@@ -86,7 +90,6 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             }
         }
 
-        let config = PrimaryTagsStorageConfig::new(metric_type);
         config.save(&base_path.join("config.json"))?;
 
         let mut primary_tags_storage = PrimaryTagsStorage {
@@ -316,9 +319,9 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
 #[derive(Serialize, Deserialize)]
 pub struct PrimaryTagsStorageConfig {
     auto_primary_tags: FnvHashSet<String>,
-    segment_duration: f64,
-    block_duration: f64,
-    datapoint_duration: f64
+    pub segment_duration: f64,
+    pub block_duration: f64,
+    pub datapoint_duration: f64
 }
 
 impl PrimaryTagsStorageConfig {
