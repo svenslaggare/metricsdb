@@ -215,6 +215,7 @@ pub enum MetricError {
     FailedToSaveSecondaryTag(std::io::Error),
     FailedToLoadSecondaryTag(std::io::Error),
     FailedToCreateMetric(std::io::Error),
+    FailedToRemoveMetric(std::io::Error),
     InvalidTimeOrder,
     TooLargeCount
 }

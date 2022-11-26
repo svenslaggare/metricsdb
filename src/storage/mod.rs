@@ -3,9 +3,24 @@ use std::path::Path;
 use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 
 pub struct MetricStorageConfig {
+    pub max_segments: Option<usize>,
     pub segment_duration: u64,
     pub block_duration: u64,
     pub datapoint_duration: u64
+}
+
+impl MetricStorageConfig {
+    pub fn new(max_segments: Option<usize>,
+               segment_duration: u64,
+               block_duration: u64,
+               datapoint_duration: u64) -> MetricStorageConfig {
+        MetricStorageConfig {
+            max_segments,
+            segment_duration,
+            block_duration,
+            datapoint_duration
+        }
+    }
 }
 
 pub trait MetricStorage<E: Copy> {

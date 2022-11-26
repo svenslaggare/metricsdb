@@ -9,7 +9,6 @@ pub fn find_block_index<TStorage: MetricStorage<E>, E: Copy>(storage: &TStorage,
         return None;
     }
 
-
     let mut lower = 0;
     let mut upper = storage.len() - 1;
     while lower <= upper {

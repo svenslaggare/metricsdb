@@ -13,6 +13,7 @@ const SYNC_INTERVAL: Duration = Duration::new(2, 0);
 
 pub struct FileMetricStorage<E> {
     base_path: PathBuf,
+    metadata_file: MemoryFile,
     segments: Vec<Segment<E>>,
     last_sync: std::time::Instant,
     requires_sync: bool,
@@ -20,8 +21,28 @@ pub struct FileMetricStorage<E> {
 }
 
 impl<E: Copy> FileMetricStorage<E> {
+    fn initialize(&mut self, config: &MetricStorageConfig) {
+        unsafe {
+            *self.metadata_mut() = Metadata {
+                max_segments: config.max_segments,
+                segment_duration: config.segment_duration,
+                block_duration: config.block_duration,
+                datapoint_duration: config.datapoint_duration,
+                num_segments: 1
+            };
+        }
+    }
+
+    unsafe fn metadata(&self) -> *const Metadata {
+        std::mem::transmute(self.metadata_file.ptr())
+    }
+
+    unsafe fn metadata_mut(&mut self) -> *mut Metadata {
+        std::mem::transmute(self.metadata_file.ptr_mut())
+    }
+
     fn num_blocks_per_segment(&self) -> usize {
-        (((self.active_segment().segment_duration() / self.active_segment().block_duration() + 9) / 10) * 10) as usize
+        (((self.segment_duration() / self.block_duration() + 9) / 10) * 10) as usize
     }
 
     fn active_segment_mut(&mut self) -> &mut Segment<E> {
@@ -30,6 +51,10 @@ impl<E: Copy> FileMetricStorage<E> {
 
     fn active_segment(&self) -> &Segment<E> {
         self.segments.last().unwrap()
+    }
+
+    fn max_segments(&self) -> Option<usize> {
+        unsafe { (*self.metadata()).max_segments }
     }
 
     fn block_at_ptr(&self, index: usize) -> Option<*const Block<E>> {
@@ -56,12 +81,7 @@ impl<E: Copy> FileMetricStorage<E> {
     fn create_segment(&mut self) -> MetricResult<()> {
         let new_segment = Segment::new(
             &self.base_path,
-            self.segments.len(),
-            &MetricStorageConfig {
-                segment_duration: self.segment_duration(),
-                block_duration: self.block_duration(),
-                datapoint_duration: self.datapoint_duration()
-            }
+            unsafe { (*self.metadata()).num_segments },
         )?;
 
         let active_segment = self.active_segment_mut();
@@ -69,25 +89,52 @@ impl<E: Copy> FileMetricStorage<E> {
         unsafe {
             let shrink_amount = (*active_segment.active_block_mut()).compact();
             active_segment.storage_file.shrink(shrink_amount);
-            active_segment.storage_file.sync(active_segment.active_block() as *const u8, (*active_segment.active_block()).size, false)?;
+            active_segment.storage_file.sync(
+                active_segment.active_block() as *const u8,
+                (*active_segment.active_block()).size,
+                false
+            )?;
         }
 
         self.segments.push(new_segment);
+
+        unsafe {
+            (*self.metadata_mut()).num_segments += 1;
+            self.metadata_file.sync(self.metadata() as *const u8, std::mem::size_of::<Metadata>(), false)?;
+        }
+
+        Ok(())
+    }
+
+    fn try_remove_segments(&mut self) -> MetricResult<()> {
+        if let Some(max_segments) = self.max_segments() {
+            if self.segments.len() > max_segments {
+                let segment = self.segments.remove(0);
+                if let Err(err) = segment.remove() {
+                    self.segments.insert(0, segment);
+                    return Err(err);
+                }
+            }
+        }
+
         Ok(())
     }
 }
 
 impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     fn new(base_path: &Path, config: MetricStorageConfig) -> Result<Self, MetricError> {
-        Ok(
-            FileMetricStorage {
-                base_path: base_path.to_owned(),
-                segments: vec![Segment::new(base_path, 0, &config)?],
-                last_sync: std::time::Instant::now(),
-                requires_sync: false,
-                _phantom: Default::default()
-            }
-        )
+        let mut storage = FileMetricStorage {
+            base_path: base_path.to_owned(),
+            metadata_file: MemoryFile::new(&base_path.join("metadata"), std::mem::size_of::<Metadata>(), true)?,
+            segments: vec![Segment::new(base_path, 0)?],
+            last_sync: std::time::Instant::now(),
+            requires_sync: false,
+            _phantom: Default::default()
+        };
+
+        storage.initialize(&config);
+
+        Ok(storage)
     }
 
     fn from_existing(base_path: &Path) -> Result<Self, MetricError> {
@@ -112,6 +159,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
         Ok(
             FileMetricStorage {
                 base_path: base_path.to_owned(),
+                metadata_file: MemoryFile::new(&base_path.join("metadata"), std::mem::size_of::<Metadata>(), false)?,
                 segments,
                 last_sync: std::time::Instant::now(),
                 requires_sync: false,
@@ -121,15 +169,15 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     }
 
     fn segment_duration(&self) -> u64 {
-        self.active_segment().segment_duration()
+        unsafe { (*self.metadata()).segment_duration }
     }
 
     fn block_duration(&self) -> u64 {
-        self.active_segment().block_duration()
+        unsafe { (*self.metadata()).block_duration }
     }
 
     fn datapoint_duration(&self) -> u64 {
-        self.active_segment().datapoint_duration()
+        unsafe { (*self.metadata()).datapoint_duration }
     }
 
     fn len(&self) -> usize {
@@ -141,9 +189,8 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
     }
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)> {
-        let num_blocks_per_segment = self.num_blocks_per_segment();
-        let (segment_index, index) = (index / num_blocks_per_segment, index % num_blocks_per_segment);
-        self.segments[segment_index].block_time_range(index)
+        let block_ptr = self.block_at_ptr(index)?;
+        unsafe { Some((*block_ptr).time_range()) }
     }
 
     fn active_block_time_range(&self) -> Option<(Time, Time)> {
@@ -158,6 +205,8 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
         if self.active_segment().len() >= self.num_blocks_per_segment() {
             self.create_segment()?;
         }
+
+        self.try_remove_segments()?;
 
         let active_segment = self.active_segment_mut();
 
@@ -225,16 +274,14 @@ pub struct Segment<E> {
 }
 
 impl<E: Copy> Segment<E> {
-    fn new(base_path: &Path,
-           segment_index: usize,
-           config: &MetricStorageConfig) -> Result<Self, MetricError> {
+    fn new(base_path: &Path, segment_index: usize) -> Result<Self, MetricError> {
         let mut segment = Segment {
             storage_file: MemoryFile::new(&base_path.join(Path::new(&format!("{}.storage", segment_index))), STORAGE_MAX_SIZE, true)?,
             index_file: MemoryFile::new(&base_path.join(Path::new(&format!("{}.index", segment_index))), INDEX_MAX_SIZE, true)?,
             _phantom: Default::default()
         };
 
-        segment.initialize(config);
+        segment.initialize();
         Ok(segment)
     }
 
@@ -248,29 +295,62 @@ impl<E: Copy> Segment<E> {
         )
     }
 
-    fn initialize(&mut self, config: &MetricStorageConfig) {
+    fn initialize(&mut self) {
         unsafe {
             *self.header_mut() = Header {
                 num_blocks: 0,
                 active_block_index: 0,
-                active_block_start: std::mem::size_of::<Header>(),
-                segment_duration: config.segment_duration,
-                block_duration: config.block_duration,
-                datapoint_duration: config.datapoint_duration
+                active_block_start: std::mem::size_of::<Header>()
             };
         }
     }
 
-    fn segment_duration(&self) -> u64 {
-        unsafe { (*self.header()).segment_duration }
+    fn allocate_sub_block_for_insertion(&mut self,
+                                        block_ptr: *mut Block<E>,
+                                        tags: Tags) -> MetricResult<&mut SubBlock<E>> {
+        let default_capacity = 100;
+        let growth_factor = 2;
+
+        unsafe {
+            if let Some((sub_block_index, sub_block)) = (*block_ptr).find_sub_block(tags) {
+                if sub_block.count < sub_block.capacity {
+                    Ok(sub_block)
+                } else {
+                    let desired_capacity = sub_block.count * growth_factor;
+                    if let Some(increased_capacity) = (*block_ptr).try_extend(&mut self.storage_file, sub_block_index, sub_block, desired_capacity)? {
+                        let size = increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
+                        (*block_ptr).size += size;
+                        Ok(sub_block)
+                    } else {
+                        let (new_sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, desired_capacity)?;
+                        if allocated {
+                            (*block_ptr).size += new_sub_block.size();
+                        }
+
+                        new_sub_block.replace_at(block_ptr, sub_block);
+                        Ok(new_sub_block)
+                    }
+                }
+            } else {
+                let (sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, default_capacity)?;
+                if allocated {
+                    (*block_ptr).size += sub_block.size();
+                }
+
+                Ok(sub_block)
+            }
+        }
     }
 
-    fn block_duration(&self) -> u64 {
-        unsafe { (*self.header()).block_duration }
-    }
+    fn remove(&self) -> MetricResult<()> {
+        std::fs::remove_file(self.storage_file.path()).map_err(|err| MetricError::FailedToRemoveMetric(err))?;
 
-    fn datapoint_duration(&self) -> u64 {
-        unsafe { (*self.header()).datapoint_duration }
+        // Ok if failed, because we use the storage file to define if a segment exists or not
+        #[allow(unused_must_use)] {
+            std::fs::remove_file(self.index_file.path()).map_err(|err| MetricError::FailedToRemoveMetric(err));
+        }
+
+        Ok(())
     }
 
     fn len(&self) -> usize {
@@ -281,8 +361,14 @@ impl<E: Copy> Segment<E> {
         self.len() > 0
     }
 
+    fn time_range(&self) -> Option<(Time, Time)> {
+        let (start_time, _) = self.block_time_range(0)?;
+        let (_, end_time) = self.block_time_range(self.len() - 1)?;
+        Some((start_time, end_time))
+    }
+
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)> {
-        unsafe { self.block_at_ptr(index).map(|block| ((*block).start_time, (*block).end_time)) }
+        unsafe { self.block_at_ptr(index).map(|block| (*block).time_range()) }
     }
 
     unsafe fn header(&self) -> *const Header {
@@ -337,51 +423,20 @@ impl<E: Copy> Segment<E> {
             (*self.active_block_mut()).datapoints_mut(tags)
         }
     }
+}
 
-    fn allocate_sub_block_for_insertion(&mut self,
-                                        block_ptr: *mut Block<E>,
-                                        tags: Tags) -> MetricResult<&mut SubBlock<E>> {
-        let default_capacity = 100;
-        let growth_factor = 2;
-
-        unsafe {
-            if let Some((sub_block_index, sub_block)) = (*block_ptr).find_sub_block(tags) {
-                if sub_block.count < sub_block.capacity {
-                    Ok(sub_block)
-                } else {
-                    let desired_capacity = sub_block.count * growth_factor;
-                    if let Some(increased_capacity) = (*block_ptr).try_extend(&mut self.storage_file, sub_block_index, sub_block, desired_capacity)? {
-                        let size = increased_capacity as usize * std::mem::size_of::<Datapoint<E>>();
-                        (*block_ptr).size += size;
-                        Ok(sub_block)
-                    } else {
-                        let (new_sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, desired_capacity)?;
-                        if allocated {
-                            (*block_ptr).size += new_sub_block.size();
-                        }
-
-                        new_sub_block.replace_at(block_ptr, sub_block);
-                        Ok(new_sub_block)
-                    }
-                }
-            } else {
-                let (sub_block, allocated) = (*block_ptr).allocate_sub_block(&mut self.storage_file, tags, default_capacity)?;
-                if allocated {
-                    (*block_ptr).size += sub_block.size();
-                }
-
-                Ok(sub_block)
-            }
-        }
-    }
+#[repr(C)]
+struct Metadata {
+    max_segments: Option<usize>,
+    segment_duration: u64,
+    block_duration: u64,
+    datapoint_duration: u64,
+    num_segments: usize
 }
 
 #[repr(C)]
 struct Header {
     num_blocks: usize,
-    segment_duration: u64,
-    block_duration: u64,
-    datapoint_duration: u64,
     active_block_index: usize,
     active_block_start: usize
 }
@@ -512,6 +567,10 @@ impl<E: Copy> Block<E> {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn time_range(&self) -> (Time, Time) {
+        (self.start_time, self.end_time)
     }
 }
 

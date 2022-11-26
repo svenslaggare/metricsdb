@@ -293,11 +293,12 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
             PrimaryTagMetric {
                 storage: TStorage::new(
                     base_path,
-                    MetricStorageConfig {
-                        segment_duration: (config.segment_duration * TIME_SCALE as f64) as u64,
-                        block_duration: (config.block_duration * TIME_SCALE as f64) as u64,
-                        datapoint_duration: (config.datapoint_duration * TIME_SCALE as f64) as u64
-                    }
+                    MetricStorageConfig::new(
+                        config.max_segments,
+                        (config.segment_duration * TIME_SCALE as f64) as u64,
+                        (config.block_duration * TIME_SCALE as f64) as u64,
+                        (config.datapoint_duration * TIME_SCALE as f64) as u64
+                    )
                 )?,
                 tags_index: SecondaryTagsIndex::new(base_path),
                 _phantom: PhantomData::default()
@@ -319,6 +320,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
 #[derive(Serialize, Deserialize)]
 pub struct PrimaryTagsStorageConfig {
     auto_primary_tags: FnvHashSet<String>,
+    pub max_segments: Option<usize>,
     pub segment_duration: f64,
     pub block_duration: f64,
     pub datapoint_duration: f64
@@ -328,6 +330,7 @@ impl PrimaryTagsStorageConfig {
     pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
         PrimaryTagsStorageConfig {
             auto_primary_tags: FnvHashSet::default(),
+            max_segments: None,
             segment_duration: DEFAULT_SEGMENT_DURATION,
             block_duration: DEFAULT_BLOCK_DURATION,
             datapoint_duration: match metric_type {
