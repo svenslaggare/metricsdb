@@ -276,7 +276,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
 pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
     storage: TStorage,
-    pub tags_index: SecondaryTagsIndex,
+    tags_index: SecondaryTagsIndex,
     _phantom: PhantomData<E>
 }
 
