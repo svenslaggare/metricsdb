@@ -10,7 +10,7 @@ use serde::{Serialize, Deserialize};
 use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, Tag, TagsFilter};
 use crate::model::{GroupKey, GroupValue, MetricError, MetricResult, Query, Tags, TIME_SCALE};
-use crate::storage::MetricStorage;
+use crate::storage::{MetricStorage, MetricStorageConfig};
 
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
@@ -154,7 +154,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
                 PrimaryTag::Named(tag) => self.base_path.join(&tag.to_string())
             };
 
-            let primary_tag = PrimaryTagMetric::new(&path, self.config.block_duration, self.config.datapoint_duration)?;
+            let primary_tag = PrimaryTagMetric::new(&path, &self.config)?;
             primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
             self.tags.insert(tag, primary_tag);
             PrimaryTagsSerialization::new(&self.base_path).save(&self.tags)?;
@@ -279,7 +279,7 @@ pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
-    pub fn new(base_path: &Path, block_duration: f64, datapoint_duration: f64) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
+    pub fn new(base_path: &Path, config: &PrimaryTagsStorageConfig) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
         }
@@ -288,8 +288,11 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
             PrimaryTagMetric {
                 storage: TStorage::new(
                     base_path,
-                    (block_duration * TIME_SCALE as f64) as u64,
-                    (datapoint_duration * TIME_SCALE as f64) as u64
+                    MetricStorageConfig {
+                        segment_duration: (config.segment_duration * TIME_SCALE as f64) as u64,
+                        block_duration: (config.block_duration * TIME_SCALE as f64) as u64,
+                        datapoint_duration: (config.datapoint_duration * TIME_SCALE as f64) as u64
+                    }
                 )?,
                 tags_index: SecondaryTagsIndex::new(base_path),
                 _phantom: PhantomData::default()
@@ -311,6 +314,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
 #[derive(Serialize, Deserialize)]
 pub struct PrimaryTagsStorageConfig {
     auto_primary_tags: FnvHashSet<String>,
+    segment_duration: f64,
     block_duration: f64,
     datapoint_duration: f64
 }
@@ -319,6 +323,7 @@ impl PrimaryTagsStorageConfig {
     pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
         PrimaryTagsStorageConfig {
             auto_primary_tags: FnvHashSet::default(),
+            segment_duration: 30.0 * 24.0 * 60.0 * 60.0,
             block_duration: DEFAULT_BLOCK_DURATION,
             datapoint_duration: match metric_type {
                 MetricType::Gauge => DEFAULT_GAUGE_DATAPOINT_DURATION,

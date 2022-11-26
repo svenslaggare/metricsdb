@@ -205,6 +205,7 @@ pub type MetricResult<T> = Result<T, MetricError>;
 #[derive(Debug)]
 pub enum MetricError {
     FailedToCreateBaseDir(std::io::Error),
+    FailedToLoadMetric(std::io::Error),
     FailedToLoadConfig(std::io::Error),
     FailedToSaveConfig(std::io::Error),
     MemoryFileError(MemoryFileError),

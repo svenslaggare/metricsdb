@@ -318,6 +318,35 @@ fn test_gauge_reload1() {
 }
 
 #[test]
+fn test_gauge_reload2() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut metric = DefaultGaugeMetric::new(temp_metric_data.path()).unwrap();
+
+    let mut count = 0;
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
+
+        count += 1;
+        if count == 2000000 {
+            metric = DefaultGaugeMetric::from_existing(temp_metric_data.path()).unwrap();
+        }
+
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(0.667791913241474),
+        metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
+    );
+}
+
+#[test]
 fn test_gauge_primary_tag_average1() {
     let temp_metric_data = tempdir().unwrap();
 

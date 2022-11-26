@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum MemoryFileError {
-    FailedToMap,
+    FailedToMap(std::io::Error),
     FailedToSync,
     IO(std::io::Error)
 }
@@ -59,7 +59,7 @@ impl MemoryFile {
         };
 
         if address == libc::MAP_FAILED {
-            return Err(MemoryFileError::FailedToMap);
+            return Err(MemoryFileError::FailedToMap(std::io::Error::last_os_error()));
         }
 
         Ok(

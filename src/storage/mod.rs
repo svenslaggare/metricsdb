@@ -2,13 +2,21 @@ use std::path::Path;
 
 use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 
+pub struct MetricStorageConfig {
+    pub segment_duration: u64,
+    pub block_duration: u64,
+    pub datapoint_duration: u64
+}
+
 pub trait MetricStorage<E: Copy> {
-    fn new(base_path: &Path, block_duration: u64, datapoint_duration: u64) -> MetricResult<Self> where Self: Sized;
+    fn new(base_path: &Path, config: MetricStorageConfig) -> MetricResult<Self> where Self: Sized;
     fn from_existing(base_path: &Path) -> MetricResult<Self> where Self: Sized;
 
+    fn segment_duration(&self) -> u64;
     fn block_duration(&self) -> u64;
     fn datapoint_duration(&self) -> u64;
 
+    fn num_segments(&self) -> usize;
     fn len(&self) -> usize;
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
