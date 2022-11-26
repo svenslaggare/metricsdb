@@ -70,6 +70,13 @@ impl PrimaryTag {
             PrimaryTag::Named(tag) => Some(tag)
         }
     }
+
+    pub fn path(&self, base_path: &Path) -> PathBuf {
+        match &self {
+            PrimaryTag::Default => base_path.join("default"),
+            PrimaryTag::Named(tag) => base_path.join(&tag.to_string())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

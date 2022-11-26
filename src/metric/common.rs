@@ -64,9 +64,11 @@ pub trait GenericMetric {
     fn scheduled(&mut self);
 }
 
+pub type PrimaryTags<TStorage, E> = FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>;
+
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,
-    tags: FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>,
+    tags: PrimaryTags<TStorage, E>,
     config: PrimaryTagsStorageConfig
 }
 
@@ -154,12 +156,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         if !self.tags.contains_key(&tag) {
-            let path = match &tag {
-                PrimaryTag::Default => self.base_path.join("default"),
-                PrimaryTag::Named(tag) => self.base_path.join(&tag.to_string())
-            };
-
-            let primary_tag = PrimaryTagMetric::new(&path, &self.config)?;
+            let primary_tag = PrimaryTagMetric::new(&tag.path(&self.base_path), &self.config)?;
             primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
             self.tags.insert(tag, primary_tag);
             PrimaryTagsSerialization::new(&self.base_path).save(&self.tags)?;
@@ -416,8 +413,7 @@ impl PrimaryTagsSerialization {
         }
     }
 
-    pub fn save<TStorage: MetricStorage<E>, E: Copy>(&self,
-                                                     primary_tags: &FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>) -> MetricResult<()> {
+    pub fn save<TStorage: MetricStorage<E>, E: Copy>(&self, primary_tags: &PrimaryTags<TStorage, E>) -> MetricResult<()> {
         let save = || -> std::io::Result<()> {
             let content = serde_json::to_string(&primary_tags.keys().collect::<Vec<_>>())?;
             std::fs::write(&self.index_path, &content)?;
@@ -428,7 +424,7 @@ impl PrimaryTagsSerialization {
         Ok(())
     }
 
-    pub fn load<TStorage: MetricStorage<E>, E: Copy>(&self) -> MetricResult<FnvHashMap<PrimaryTag, PrimaryTagMetric<TStorage, E>>> {
+    pub fn load<TStorage: MetricStorage<E>, E: Copy>(&self) -> MetricResult<PrimaryTags<TStorage, E>> {
         let mut primary_tags = FnvHashMap::default();
 
         let load = || -> std::io::Result<Vec<PrimaryTag>> {
@@ -439,12 +435,11 @@ impl PrimaryTagsSerialization {
 
         let primary_tag_values = load().map_err(|err| MetricError::FailedToLoadPrimaryTag(err))?;
         for primary_tag_value in primary_tag_values {
-            let primary_tag_base_path = match &primary_tag_value {
-                PrimaryTag::Default => self.base_path.join("default"),
-                PrimaryTag::Named(tag) => self.base_path.join(&tag.to_string())
-            };
-
-            primary_tags.insert(primary_tag_value, PrimaryTagMetric::from_existing(&primary_tag_base_path)?);
+            let primary_tag_base_path = primary_tag_value.path(&self.base_path);
+            primary_tags.insert(
+                primary_tag_value,
+                PrimaryTagMetric::from_existing(&primary_tag_base_path)?
+            );
         }
 
         Ok(primary_tags)
