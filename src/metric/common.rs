@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, Tag, TagsFilter};
-use crate::model::{GroupKey, GroupValue, MetricError, MetricResult, Query, Tags, TIME_SCALE};
+use crate::model::{Datapoint, GroupKey, GroupValue, MetricError, MetricResult, Query, Tags, Time, TIME_SCALE};
 use crate::storage::{MetricStorage, MetricStorageConfig};
 
 pub const DEFAULT_SEGMENT_DURATION: f64 = 30.0 * 24.0 * 60.0 * 60.0;
@@ -314,6 +314,47 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
                 _phantom: PhantomData::default()
             }
         )
+    }
+
+    pub fn add(&mut self,
+               time: f64,
+               value: E,
+               secondary_tags: Tags,
+               handle_same_datapoint: impl Fn(&mut Datapoint<E>, E)) -> MetricResult<()> {
+        let time = (time * TIME_SCALE as f64).round() as Time;
+
+        let mut datapoint = Datapoint {
+            time_offset: 0,
+            value
+        };
+
+        if let Some((block_start_time, block_end_time)) = self.storage.active_block_time_range() {
+            if time < block_end_time {
+                return Err(MetricError::InvalidTimeOrder);
+            }
+
+            let time_offset = time - block_start_time;
+            if time_offset < self.storage.block_duration() {
+                assert!(time_offset < u32::MAX as u64);
+                datapoint.time_offset = time_offset as u32;
+
+                let datapoint_duration = self.storage.datapoint_duration();
+                if let Some(last_datapoint) = self.storage.last_datapoint_mut(secondary_tags) {
+                    if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
+                        handle_same_datapoint(last_datapoint, value);
+                        return Ok(());
+                    }
+                }
+
+                self.storage.add_datapoint(secondary_tags, datapoint)?;
+            } else {
+                self.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+            }
+        } else {
+            self.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+        }
+
+        Ok(())
     }
 }
 

@@ -7,7 +7,7 @@ use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingS
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::expression::ExpressionValue;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
-use crate::model::{Datapoint, MetricError, MetricResult, Query, Time, TIME_SCALE, TimeRange};
+use crate::model::{MetricResult, Query, TIME_SCALE, TimeRange};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
 
@@ -170,41 +170,14 @@ impl<TStorage: MetricStorage<u32>> GenericMetric for CountMetric<TStorage> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
         let add = |primary_tag: &mut PrimaryTagMetric<TStorage, u32>| {
-            let time = (time * TIME_SCALE as f64).round() as Time;
-            let value = count.value()?;
-
-            let mut datapoint = Datapoint {
-                time_offset: 0,
-                value
-            };
-
-            if let Some((block_start_time, block_end_time)) = primary_tag.storage.active_block_time_range() {
-                if time < block_end_time {
-                    return Err(MetricError::InvalidTimeOrder);
+            primary_tag.add(
+                time,
+                count.value()?,
+                secondary_tags,
+                |last_datapoint, value| {
+                    last_datapoint.value += value;
                 }
-
-                let time_offset = time - block_start_time;
-                if time_offset < primary_tag.storage.block_duration() {
-                    assert!(time_offset < u32::MAX as u64);
-                    datapoint.time_offset = time_offset as u32;
-
-                    let datapoint_duration = primary_tag.storage.datapoint_duration();
-                    if let Some(last_datapoint) = primary_tag.storage.last_datapoint_mut(secondary_tags) {
-                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
-                            last_datapoint.value += value;
-                            return Ok(());
-                        }
-                    }
-
-                    primary_tag.storage.add_datapoint(secondary_tags, datapoint)?;
-                } else {
-                    primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-                }
-            } else {
-                primary_tag.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
-            }
-
-            Ok(())
+            )
         };
 
         let result = add(&mut primary_tag);
