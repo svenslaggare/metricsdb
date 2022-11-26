@@ -275,7 +275,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 }
 
 pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
-    pub storage: TStorage,
+    storage: TStorage,
     pub tags_index: SecondaryTagsIndex,
     _phantom: PhantomData<E>
 }
@@ -311,6 +311,10 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
                 _phantom: PhantomData::default()
             }
         )
+    }
+
+    pub fn storage(&self) -> &TStorage {
+        &self.storage
     }
 
     pub fn add(&mut self,

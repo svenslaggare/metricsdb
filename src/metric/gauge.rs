@@ -119,11 +119,11 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         let apply = |tags_filter: &TagsFilter| {
             let mut streaming_operations = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
-                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                if let Some(start_block_index) = metric_operations::find_block_index(primary_tag.storage(), start_time) {
                     let stats = if require_statistics {
                         Some(
                             metric_operations::determine_statistics_for_time_range(
-                                &primary_tag.storage,
+                                primary_tag.storage(),
                                 start_time,
                                 end_time,
                                 tags_filter,
@@ -136,7 +136,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
                     let mut streaming_operation = create_op(stats.as_ref());
                     metric_operations::visit_datapoints_in_time_range(
-                        &primary_tag.storage,
+                        primary_tag.storage(),
                         start_time,
                         end_time,
                         tags_filter,
@@ -186,14 +186,14 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         let apply = |tags_filter: &TagsFilter| {
             let mut primary_tags_windowing = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
-                if let Some(start_block_index) = metric_operations::find_block_index(&primary_tag.storage, start_time) {
+                if let Some(start_block_index) = metric_operations::find_block_index(primary_tag.storage(), start_time) {
                     let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
                     let window_stats = if require_statistics {
                         let mut window_stats = windowing.create_windows(|| None);
 
                         metric_operations::visit_datapoints_in_time_range(
-                            &primary_tag.storage,
+                            primary_tag.storage(),
                             start_time,
                             end_time,
                             tags_filter,
@@ -215,7 +215,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                     };
 
                     metric_operations::visit_datapoints_in_time_range(
-                        &primary_tag.storage,
+                        primary_tag.storage(),
                         start_time,
                         end_time,
                         tags_filter,
