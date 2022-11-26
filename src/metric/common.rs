@@ -12,6 +12,8 @@ use crate::metric::tags::{PrimaryTag, SecondaryTagsFilter, SecondaryTagsIndex, T
 use crate::model::{GroupKey, GroupValue, MetricError, MetricResult, Query, Tags, TIME_SCALE};
 use crate::storage::{MetricStorage, MetricStorageConfig};
 
+pub const DEFAULT_SEGMENT_DURATION: f64 = 30.0 * 24.0 * 60.0 * 60.0;
+
 pub const DEFAULT_BLOCK_DURATION: f64 = 10.0 * 60.0;
 
 pub const DEFAULT_GAUGE_DATAPOINT_DURATION: f64 = 0.2;
@@ -323,7 +325,7 @@ impl PrimaryTagsStorageConfig {
     pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
         PrimaryTagsStorageConfig {
             auto_primary_tags: FnvHashSet::default(),
-            segment_duration: 30.0 * 24.0 * 60.0 * 60.0,
+            segment_duration: DEFAULT_SEGMENT_DURATION,
             block_duration: DEFAULT_BLOCK_DURATION,
             datapoint_duration: match metric_type {
                 MetricType::Gauge => DEFAULT_GAUGE_DATAPOINT_DURATION,
