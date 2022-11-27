@@ -116,12 +116,13 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn stats(&self) {
         for (tag, primary_tag) in self.tags.iter() {
+            let storage = primary_tag.storage(None);
             println!("Tag: {:?}", tag);
-            println!("Num blocks: {}", primary_tag.storage.len());
+            println!("Num blocks: {}", storage.len());
             let mut num_datapoints = 0;
             let mut max_datapoints_in_block = 0;
-            for block_index in 0..primary_tag.storage.len() {
-                if let Some(iterator) = primary_tag.storage.block_datapoints(block_index) {
+            for block_index in 0..storage.len() {
+                if let Some(iterator) = storage.block_datapoints(block_index) {
                     for (_, datapoints) in iterator {
                         let block_length = datapoints.len();
                         num_datapoints += block_length;
@@ -269,13 +270,13 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
 
     pub fn scheduled(&mut self) {
         for primary_tag in self.tags.values_mut() {
-            primary_tag.storage.scheduled();
+            primary_tag.scheduled();
         }
     }
 }
 
 pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
-    storage: TStorage,
+    storage_for_durations: Vec<TStorage>,
     tags_index: SecondaryTagsIndex,
     _phantom: PhantomData<E>
 }
@@ -286,17 +287,32 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
         }
 
+        let mut storage_for_durations = Vec::new();
+        let mut storage_names = Vec::new();
+        for duration_config in &config.durations {
+            let storage_config = duration_config.storage_config();
+
+            let storage_name = format!("{}", storage_config.datapoint_duration);
+            let storage_folder = base_path.join(&storage_name);
+            if !storage_folder.exists() {
+                std::fs::create_dir_all(&storage_folder).map_err(|err| MetricError::FailedToCreateMetric(err))?;
+            }
+
+            storage_for_durations.push(TStorage::new(&storage_folder, storage_config)?);
+            storage_names.push(storage_name);
+        }
+
+        let save = || {
+            let content = serde_json::to_string(&storage_names)?;
+            std::fs::write(&base_path.join("config.json"), &content)?;
+            Ok(())
+        };
+
+        save().map_err(|err| MetricError::FailedToCreateMetric(err))?;
+
         Ok(
             PrimaryTagMetric {
-                storage: TStorage::new(
-                    base_path,
-                    MetricStorageConfig::new(
-                        config.max_segments,
-                        (config.segment_duration * TIME_SCALE as f64) as u64,
-                        (config.block_duration * TIME_SCALE as f64) as u64,
-                        (config.datapoint_duration * TIME_SCALE as f64) as u64
-                    )
-                )?,
+                storage_for_durations,
                 tags_index: SecondaryTagsIndex::new(base_path),
                 _phantom: PhantomData::default()
             }
@@ -304,17 +320,44 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
     }
 
     pub fn from_existing(base_path: &Path) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
+        let load = || {
+            let content = std::fs::read_to_string(base_path.join("config.json"))?;
+            let storage_names: Vec<String> = serde_json::from_str(&content)?;
+            Ok(storage_names)
+        };
+
+        let storage_names = load().map_err(|err| MetricError::FailedToLoadMetric(err))?;
+        let mut storage_for_durations = Vec::new();
+        for storage_name in storage_names {
+            storage_for_durations.push(TStorage::from_existing(&base_path.join(storage_name))?);
+        }
+
         Ok(
             PrimaryTagMetric {
-                storage: TStorage::from_existing(base_path)?,
+                storage_for_durations,
                 tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json"))?,
                 _phantom: PhantomData::default()
             }
         )
     }
 
-    pub fn storage(&self) -> &TStorage {
-        &self.storage
+    pub fn storage(&self, time_range: Option<(Time, Time, Time)>) -> &TStorage {
+        // We assume that each storage duration is ordered in decreasing datapoint duration
+        if let Some((start_time, end_time, duration)) = time_range {
+            if duration < self.storage_for_durations[0].datapoint_duration() {
+                for storage_duration in self.storage_for_durations.iter().skip(1).rev() {
+                    if let Some((storage_start_time, storage_end_time)) = storage_duration.time_range() {
+                        if start_time >= storage_start_time && end_time <= storage_end_time {
+                            return storage_duration;
+                        }
+                    }
+                }
+            }
+
+            &self.storage_for_durations[0]
+        } else {
+            &self.storage_for_durations[0]
+        }
     }
 
     pub fn add(&mut self,
@@ -322,56 +365,68 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
                value: E,
                secondary_tags: Tags,
                handle_same_datapoint: impl Fn(&mut Datapoint<E>, E)) -> MetricResult<()> {
-        let time = (time * TIME_SCALE as f64).round() as Time;
+        let add = |storage: &mut TStorage| {
+            let time = (time * TIME_SCALE as f64).round() as Time;
 
-        let mut datapoint = Datapoint {
-            time_offset: 0,
-            value
-        };
+            let mut datapoint = Datapoint {
+                time_offset: 0,
+                value
+            };
 
-        if let Some((block_start_time, block_end_time)) = self.storage.active_block_time_range() {
-            if time < block_end_time {
-                return Err(MetricError::InvalidTimeOrder);
-            }
-
-            let time_offset = time - block_start_time;
-            if time_offset < self.storage.block_duration() {
-                assert!(time_offset < u32::MAX as u64);
-                datapoint.time_offset = time_offset as u32;
-
-                let datapoint_duration = self.storage.datapoint_duration();
-                if let Some(last_datapoint) = self.storage.last_datapoint_mut(secondary_tags) {
-                    if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
-                        handle_same_datapoint(last_datapoint, value);
-                        return Ok(());
-                    }
+            if let Some((block_start_time, block_end_time)) = storage.active_block_time_range() {
+                if time < block_end_time {
+                    return Err(MetricError::InvalidTimeOrder);
                 }
 
-                self.storage.add_datapoint(secondary_tags, datapoint)?;
+                let time_offset = time - block_start_time;
+                if time_offset < storage.block_duration() {
+                    assert!(time_offset < u32::MAX as u64);
+                    datapoint.time_offset = time_offset as u32;
+
+                    let datapoint_duration = storage.datapoint_duration();
+                    if let Some(last_datapoint) = storage.last_datapoint_mut(secondary_tags) {
+                        if (time - (block_start_time + last_datapoint.time_offset as u64)) < datapoint_duration {
+                            handle_same_datapoint(last_datapoint, value);
+                            return Ok(());
+                        }
+                    }
+
+                    storage.add_datapoint(secondary_tags, datapoint)?;
+                } else {
+                    storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+                }
             } else {
-                self.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+                storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
             }
-        } else {
-            self.storage.create_block_with_datapoint(time, secondary_tags, datapoint)?;
+
+            Ok(())
+        };
+
+        for storage in &mut self.storage_for_durations {
+            add(storage)?;
         }
 
         Ok(())
     }
+
+    pub fn scheduled(&mut self) {
+        for storage in &mut self.storage_for_durations {
+            storage.scheduled();
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct PrimaryTagsStorageConfig {
-    auto_primary_tags: FnvHashSet<String>,
+pub struct StorageDurationConfig {
     pub max_segments: Option<usize>,
     pub segment_duration: f64,
     pub block_duration: f64,
     pub datapoint_duration: f64
 }
 
-impl PrimaryTagsStorageConfig {
-    pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
-        PrimaryTagsStorageConfig {
-            auto_primary_tags: FnvHashSet::default(),
+impl StorageDurationConfig {
+    pub fn default_for(metric_type: MetricType) -> StorageDurationConfig {
+        StorageDurationConfig {
             max_segments: None,
             segment_duration: DEFAULT_SEGMENT_DURATION,
             block_duration: DEFAULT_BLOCK_DURATION,
@@ -380,6 +435,30 @@ impl PrimaryTagsStorageConfig {
                 MetricType::Count => DEFAULT_COUNT_DATAPOINT_DURATION,
                 MetricType::Ratio => DEFAULT_RATIO_DATAPOINT_DURATION
             }
+        }
+    }
+
+    pub fn storage_config(&self) -> MetricStorageConfig {
+        MetricStorageConfig::new(
+            self.max_segments,
+            (self.segment_duration * TIME_SCALE as f64) as u64,
+            (self.block_duration * TIME_SCALE as f64) as u64,
+            (self.datapoint_duration * TIME_SCALE as f64) as u64
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrimaryTagsStorageConfig {
+    auto_primary_tags: FnvHashSet<String>,
+    pub durations: Vec<StorageDurationConfig>
+}
+
+impl PrimaryTagsStorageConfig {
+    pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
+        PrimaryTagsStorageConfig {
+            auto_primary_tags: FnvHashSet::default(),
+            durations: vec![StorageDurationConfig::default_for(metric_type)]
         }
     }
 

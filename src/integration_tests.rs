@@ -9,7 +9,7 @@ use tempfile::tempdir;
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue};
 use crate::engine::querying::{MetricQuery, MetricQueryExpression};
-use crate::metric::common::{GenericMetric, MetricType, PrimaryTagsStorageConfig};
+use crate::metric::common::{GenericMetric, MetricType, PrimaryTagsStorageConfig, StorageDurationConfig};
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::expression::{ArithmeticOperation, CompareOperation, FilterExpression, Function, TransformExpression};
@@ -446,7 +446,7 @@ fn test_gauge_segments_reload1() {
     let end_time = start_time + 2.0 * 3600.0;
 
     let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
-    config.segment_duration = 6.0 * 60.0 * 60.0;
+    config.durations[0].segment_duration = 6.0 * 60.0 * 60.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
 
     let mut count = 0;
@@ -477,8 +477,8 @@ fn test_gauge_segments_remove1() {
     let end_time = start_time + 2.0 * 3600.0;
 
     let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
-    config.max_segments = Some(30);
-    config.segment_duration = 6.0 * 3600.0;
+    config.durations[0].max_segments = Some(30);
+    config.durations[0].segment_duration = 6.0 * 3600.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
@@ -500,11 +500,10 @@ fn test_gauge_segments_remove2() {
 
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
-    println!("[{}, {}]", start_time, end_time);
 
     let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
-    config.max_segments = Some(20);
-    config.segment_duration = 6.0 * 3600.0;
+    config.durations[0].max_segments = Some(20);
+    config.durations[0].segment_duration = 6.0 * 3600.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
@@ -517,6 +516,141 @@ fn test_gauge_segments_remove2() {
     assert_eq!(
         Some(0.667791913241474),
         metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
+    );
+}
+
+#[test]
+fn test_gauge_multiple_durations1() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut faster_duration = StorageDurationConfig::default_for(MetricType::Gauge);
+    faster_duration.datapoint_duration = 0.1;
+    config.durations.push(faster_duration);
+    let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(0.667791913241474),
+        metric.average(Query::new(TimeRange::new(start_time, end_time))).value()
+    );
+}
+
+#[test]
+fn test_gauge_multiple_durations2() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    config.durations[0].datapoint_duration = 10.0;
+    let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(vec![
+            (1654596000.0, Some(0.7623410224914551)),
+            (1654596015.0, Some(0.7596292793750763)),
+            (1654596030.0, Some(0.7643710076808929)),
+            (1654596045.0, Some(0.7709805965423584))
+        ]),
+        metric.average_in_window(Query::new(TimeRange::new(start_time, start_time + 60.0)), Duration::from_secs_f64(15.0)).time_values()
+    );
+
+    assert_eq!(
+        Some(vec![
+            (1654596006.0, Some(0.7623410224914551)),
+            (1654596016.0, Some(0.7514280676841736)),
+            (1654596026.0, Some(0.767830491065979)),
+            (1654596036.0, Some(0.7641525864601135)),
+            (1654596044.0, Some(0.7645894289016724)),
+            (1654596054.0, Some(0.7709805965423584))
+        ]),
+        metric.average_in_window(Query::new(TimeRange::new(start_time, start_time + 60.0)), Duration::from_secs_f64(2.0)).time_values()
+    );
+}
+
+#[test]
+fn test_gauge_multiple_durations3() {
+    let temp_metric_data = tempdir().unwrap();
+
+    let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
+    let end_time = start_time + 2.0 * 3600.0;
+
+    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    config.durations[0].datapoint_duration = 10.0;
+    let mut faster_duration = StorageDurationConfig::default_for(MetricType::Gauge);
+    faster_duration.datapoint_duration = 1.0;
+    config.durations.push(faster_duration);
+    let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
+
+    for index in 0..SAMPLE_DATA.times.len() {
+        metric.add(SAMPLE_DATA.times[index], SAMPLE_DATA.values[index] as f64, Vec::new()).unwrap();
+        if SAMPLE_DATA.times[index] >= end_time + 3600.0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        Some(vec![
+            (1654596000.0, Some(0.7623410224914551)),
+            (1654596015.0, Some(0.7596292793750763)),
+            (1654596030.0, Some(0.7643710076808929)),
+            (1654596045.0, Some(0.7709805965423584))
+        ]),
+        metric.average_in_window(Query::new(TimeRange::new(start_time, start_time + 60.0)), Duration::from_secs_f64(15.0)).time_values()
+    );
+
+    assert_eq!(
+        Some(vec![
+            (1654596000.0, Some(0.7637167572975159)),
+            (1654596002.0, Some(0.7580450773239136)),
+            (1654596004.0, Some(0.7613156139850616)),
+            (1654596006.0, Some(0.7570991516113281)),
+            (1654596008.0, Some(0.7641935348510742)),
+            (1654596010.0, Some(0.7648496627807617)),
+            (1654596012.0, Some(0.7661760151386261)),
+            (1654596014.0, Some(0.7678832113742828)),
+            (1654596016.0, Some(0.760563462972641)),
+            (1654596018.0, Some(0.7685678601264954)),
+            (1654596020.0, Some(0.7670826613903046)),
+            (1654596022.0, Some(0.7649800479412079)),
+            (1654596024.0, Some(0.7651969194412231)),
+            (1654596026.0, Some(0.7659425735473633)),
+            (1654596028.0, Some(0.7556097507476807)),
+            (1654596030.0, Some(0.761206328868866)),
+            (1654596032.0, Some(0.7634029388427734)),
+            (1654596034.0, Some(0.7706423401832581)),
+            (1654596036.0, Some(0.7674989998340607)),
+            (1654596038.0, Some(0.758998692035675)),
+            (1654596040.0, Some(0.7695607244968414)),
+            (1654596042.0, Some(0.7605744898319244)),
+            (1654596044.0, Some(0.7630680203437805)),
+            (1654596046.0, Some(0.7692327797412872)),
+            (1654596048.0, Some(0.7624682188034058)),
+            (1654596050.0, Some(0.7596468925476074)),
+            (1654596052.0, Some(0.7719657719135284)),
+            (1654596054.0, Some(0.7644509077072144)),
+            (1654596056.0, Some(0.76540207862854)),
+            (1654596058.0, Some(0.7614836096763611))
+        ]),
+        metric.average_in_window(Query::new(TimeRange::new(start_time, start_time + 60.0)), Duration::from_secs_f64(2.0)).time_values()
     );
 }
 

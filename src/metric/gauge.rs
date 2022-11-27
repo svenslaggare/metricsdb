@@ -7,7 +7,7 @@ use crate::metric::operations::{StreamingApproxPercentileTDigest, StreamingAvera
 use crate::metric::{metric_operations, OperationResult};
 use crate::metric::expression::ExpressionValue;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
-use crate::model::{MetricResult, Query, TIME_SCALE};
+use crate::model::{MetricResult, Query, Time, TIME_SCALE};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
 
@@ -119,11 +119,12 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         let apply = |tags_filter: &TagsFilter| {
             let mut streaming_operations = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
-                if let Some(start_block_index) = metric_operations::find_block_index(primary_tag.storage(), start_time) {
+                let storage = primary_tag.storage(None);
+                if let Some(start_block_index) = metric_operations::find_block_index(storage, start_time) {
                     let stats = if require_statistics {
                         Some(
                             metric_operations::determine_statistics_for_time_range(
-                                primary_tag.storage(),
+                                storage,
                                 start_time,
                                 end_time,
                                 tags_filter,
@@ -136,7 +137,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
 
                     let mut streaming_operation = create_op(stats.as_ref());
                     metric_operations::visit_datapoints_in_time_range(
-                        primary_tag.storage(),
+                        storage,
                         start_time,
                         end_time,
                         tags_filter,
@@ -181,19 +182,20 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
         let (start_time, end_time) = query.time_range.int_range();
         assert!(end_time > start_time);
 
-        let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as u64;
+        let duration = (duration.as_secs_f64() * TIME_SCALE as f64) as Time;
 
         let apply = |tags_filter: &TagsFilter| {
             let mut primary_tags_windowing = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
-                if let Some(start_block_index) = metric_operations::find_block_index(primary_tag.storage(), start_time) {
+                let storage = primary_tag.storage(Some((start_time, end_time, duration)));
+                if let Some(start_block_index) = metric_operations::find_block_index(storage, start_time) {
                     let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
                     let window_stats = if require_statistics {
                         let mut window_stats = windowing.create_windows(|| None);
 
                         metric_operations::visit_datapoints_in_time_range(
-                            primary_tag.storage(),
+                            storage,
                             start_time,
                             end_time,
                             tags_filter,
@@ -215,7 +217,7 @@ impl<TStorage: MetricStorage<f32>> GaugeMetric<TStorage> {
                     };
 
                     metric_operations::visit_datapoints_in_time_range(
-                        primary_tag.storage(),
+                        storage,
                         start_time,
                         end_time,
                         tags_filter,
@@ -280,18 +282,15 @@ impl<TStorage: MetricStorage<f32>> GenericMetric for GaugeMetric<TStorage> {
     fn add(&mut self, time: f64, value: f64, mut tags: Vec<Tag>) -> MetricResult<()> {
         let (primary_tag_key, mut primary_tag, secondary_tags) = self.primary_tags_storage.insert_tags(&mut tags)?;
 
-        let add = |primary_tag: &mut PrimaryTagMetric<TStorage, f32>| {
-            primary_tag.add(
-                time,
-                value as f32,
-                secondary_tags,
-                |last_datapoint, value| {
-                    last_datapoint.value = value;
-                }
-            )
-        };
+        let result = primary_tag.add(
+            time,
+            value as f32,
+            secondary_tags,
+            |last_datapoint, value| {
+                last_datapoint.value = value;
+            }
+        );
 
-        let result = add(&mut primary_tag);
         self.primary_tags_storage.return_tags(primary_tag_key, primary_tag);
         result
     }

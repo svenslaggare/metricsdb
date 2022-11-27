@@ -33,6 +33,7 @@ pub trait MetricStorage<E: Copy> {
 
     fn num_segments(&self) -> usize;
     fn len(&self) -> usize;
+    fn time_range(&self) -> Option<(Time, Time)>;
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)>;
 

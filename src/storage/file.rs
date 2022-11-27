@@ -7,7 +7,7 @@ use crate::storage::memory_file::MemoryFile;
 use crate::model::{Datapoint, MetricError, MetricResult, Tags, Time};
 use crate::storage::{MetricStorage, MetricStorageConfig};
 
-const STORAGE_MAX_SIZE: usize = 1024 * 1024 * 1024;
+const STORAGE_MAX_SIZE: usize = 8 * 1024 * 1024 * 1024;
 const INDEX_MAX_SIZE: usize = 1024 * 1024;
 const SYNC_INTERVAL: Duration = Duration::new(2, 0);
 
@@ -186,6 +186,23 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
 
     fn num_segments(&self) -> usize {
         self.segments.len()
+    }
+
+    fn time_range(&self) -> Option<(Time, Time)> {
+        let mut start_time = None;
+        let mut end_time = None;
+
+        for segment in &self.segments {
+            if let Some((segment_start, segment_end)) = segment.time_range() {
+                start_time = start_time.map(|time: Time| time.min(segment_start)).or(Some(segment_start));
+                end_time = end_time.map(|time: Time| time.max(segment_end)).or(Some(segment_end));
+            }
+        }
+
+        match (start_time, end_time) {
+            (Some(start_time), Some(end_time)) => Some((start_time, end_time)),
+            _ => None
+        }
     }
 
     fn block_time_range(&self, index: usize) -> Option<(Time, Time)> {
