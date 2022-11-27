@@ -9,7 +9,7 @@ use fnv::FnvBuildHasher;
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError, MetricsEngineResult};
 use crate::engine::querying;
 use crate::engine::querying::MetricQuery;
-use crate::metric::common::{CountInput, GenericMetric, MetricType};
+use crate::metric::common::{CountInput, GenericMetric, MetricConfig, MetricType};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
@@ -73,19 +73,14 @@ impl MetricsEngine {
         }
     }
 
-    pub fn add_gauge_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        self.add_metric(name, |name| Ok(Metric::gauge(DefaultGaugeMetric::new(&self.base_path.join(name))?)))
+    pub fn add_metric(&self, name: &str, metric_type: MetricType) -> MetricsEngineResult<()> {
+        self.add_metric_with_config(name, metric_type.clone(), MetricConfig::new(metric_type))
     }
 
-    pub fn add_count_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        self.add_metric(name, |name| Ok(Metric::count(DefaultCountMetric::new(&self.base_path.join(name))?)))
-    }
-
-    pub fn add_ratio_metric(&self, name: &str) -> MetricsEngineResult<()> {
-        self.add_metric(name, |name| Ok(Metric::ratio(DefaultRatioMetric::new(&self.base_path.join(name))?)))
-    }
-
-    fn add_metric(&self, name: &str, create: impl Fn(&str) -> MetricsEngineResult<ArcMetric>) -> MetricsEngineResult<()> {
+    pub fn add_metric_with_config(&self,
+                                  name: &str,
+                                  metric_type: MetricType,
+                                  config: MetricConfig) -> MetricsEngineResult<()> {
         let _guard = self.create_lock.lock().unwrap();
         if self.metrics.contains_key(name) {
             return Err(MetricsEngineError::MetricAlreadyExists);
@@ -93,7 +88,11 @@ impl MetricsEngine {
 
         self.metrics.insert(
             name.to_string(),
-            create(name)?
+            match metric_type {
+                MetricType::Gauge => Metric::gauge(DefaultGaugeMetric::with_config(&self.base_path.join(name), config)?),
+                MetricType::Count => Metric::count(DefaultCountMetric::with_config(&self.base_path.join(name), config)?),
+                MetricType::Ratio => Metric::ratio(DefaultRatioMetric::with_config(&self.base_path.join(name), config)?)
+            }
         );
 
         self.save_defined_metrics()?;

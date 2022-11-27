@@ -20,7 +20,7 @@ pub const DEFAULT_GAUGE_DATAPOINT_DURATION: f64 = 0.2;
 pub const DEFAULT_COUNT_DATAPOINT_DURATION: f64 = 1.0;
 pub const DEFAULT_RATIO_DATAPOINT_DURATION: f64 = 1.0;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MetricType {
     Gauge,
     Count,
@@ -69,15 +69,15 @@ pub type PrimaryTags<TStorage, E> = FnvHashMap<PrimaryTag, PrimaryTagMetric<TSto
 pub struct PrimaryTagsStorage<TStorage: MetricStorage<E>, E: Copy> {
     base_path: PathBuf,
     tags: PrimaryTags<TStorage, E>,
-    config: PrimaryTagsStorageConfig
+    config: MetricConfig
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     pub fn new(base_path: &Path, metric_type: MetricType) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
-        PrimaryTagsStorage::with_config(base_path, PrimaryTagsStorageConfig::new(metric_type))
+        PrimaryTagsStorage::with_config(base_path, MetricConfig::new(metric_type))
     }
 
-    pub fn with_config(base_path: &Path, config: PrimaryTagsStorageConfig) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
+    pub fn with_config(base_path: &Path, config: MetricConfig) -> MetricResult<PrimaryTagsStorage<TStorage, E>> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
         }
@@ -109,7 +109,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
             PrimaryTagsStorage {
                 base_path: base_path.to_owned(),
                 tags: PrimaryTagsSerialization::new(base_path).load()?,
-                config: PrimaryTagsStorageConfig::load(&base_path.join("config.json"))?
+                config: MetricConfig::load(&base_path.join("config.json"))?
             }
         )
     }
@@ -282,7 +282,7 @@ pub struct PrimaryTagMetric<TStorage: MetricStorage<E>, E: Copy> {
 }
 
 impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
-    pub fn new(base_path: &Path, config: &PrimaryTagsStorageConfig) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
+    pub fn new(base_path: &Path, config: &MetricConfig) -> MetricResult<PrimaryTagMetric<TStorage, E>> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
         }
@@ -417,48 +417,16 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct StorageDurationConfig {
-    pub max_segments: Option<usize>,
-    pub segment_duration: f64,
-    pub block_duration: f64,
-    pub datapoint_duration: f64
-}
-
-impl StorageDurationConfig {
-    pub fn default_for(metric_type: MetricType) -> StorageDurationConfig {
-        StorageDurationConfig {
-            max_segments: None,
-            segment_duration: DEFAULT_SEGMENT_DURATION,
-            block_duration: DEFAULT_BLOCK_DURATION,
-            datapoint_duration: match metric_type {
-                MetricType::Gauge => DEFAULT_GAUGE_DATAPOINT_DURATION,
-                MetricType::Count => DEFAULT_COUNT_DATAPOINT_DURATION,
-                MetricType::Ratio => DEFAULT_RATIO_DATAPOINT_DURATION
-            }
-        }
-    }
-
-    pub fn storage_config(&self) -> MetricStorageConfig {
-        MetricStorageConfig::new(
-            self.max_segments,
-            (self.segment_duration * TIME_SCALE as f64) as u64,
-            (self.block_duration * TIME_SCALE as f64) as u64,
-            (self.datapoint_duration * TIME_SCALE as f64) as u64
-        )
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PrimaryTagsStorageConfig {
+pub struct MetricConfig {
     auto_primary_tags: FnvHashSet<String>,
-    pub durations: Vec<StorageDurationConfig>
+    pub durations: Vec<MetricStorageDurationConfig>
 }
 
-impl PrimaryTagsStorageConfig {
-    pub fn new(metric_type: MetricType) -> PrimaryTagsStorageConfig {
-        PrimaryTagsStorageConfig {
+impl MetricConfig {
+    pub fn new(metric_type: MetricType) -> MetricConfig {
+        MetricConfig {
             auto_primary_tags: FnvHashSet::default(),
-            durations: vec![StorageDurationConfig::default_for(metric_type)]
+            durations: vec![MetricStorageDurationConfig::default_for(metric_type)]
         }
     }
 
@@ -472,14 +440,50 @@ impl PrimaryTagsStorageConfig {
         save().map_err(|err| MetricError::FailedToSaveConfig(err))
     }
 
-    pub fn load(path: &Path) -> MetricResult<PrimaryTagsStorageConfig> {
+    pub fn load(path: &Path) -> MetricResult<MetricConfig> {
         let load = || {
             let content = std::fs::read_to_string(path)?;
-            let config: PrimaryTagsStorageConfig = serde_json::from_str(&content)?;
+            let config: MetricConfig = serde_json::from_str(&content)?;
             Ok(config)
         };
 
         load().map_err(|err| MetricError::FailedToLoadConfig(err))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MetricStorageDurationConfig {
+    pub max_segments: Option<usize>,
+    pub segment_duration: f64,
+    pub block_duration: f64,
+    pub datapoint_duration: f64
+}
+
+impl MetricStorageDurationConfig {
+    pub fn default_for(metric_type: MetricType) -> MetricStorageDurationConfig {
+        MetricStorageDurationConfig {
+            max_segments: None,
+            segment_duration: DEFAULT_SEGMENT_DURATION,
+            block_duration: DEFAULT_BLOCK_DURATION,
+            datapoint_duration: match metric_type {
+                MetricType::Gauge => DEFAULT_GAUGE_DATAPOINT_DURATION,
+                MetricType::Count => DEFAULT_COUNT_DATAPOINT_DURATION,
+                MetricType::Ratio => DEFAULT_RATIO_DATAPOINT_DURATION
+            }
+        }
+    }
+
+    pub fn set_max_segments(&mut self, alive_time: f64) {
+        self.max_segments = Some((self.segment_duration / alive_time).ceil() as usize);
+    }
+
+    pub fn storage_config(&self) -> MetricStorageConfig {
+        MetricStorageConfig::new(
+            self.max_segments,
+            (self.segment_duration * TIME_SCALE as f64) as u64,
+            (self.block_duration * TIME_SCALE as f64) as u64,
+            (self.datapoint_duration * TIME_SCALE as f64) as u64
+        )
     }
 }
 

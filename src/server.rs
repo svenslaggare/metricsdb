@@ -17,6 +17,7 @@ use axum::routing::{post, put};
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError};
 use crate::engine::querying::{MetricQuery, MetricQueryExpression};
+use crate::metric::common::{MetricConfig, MetricType, MetricStorageDurationConfig};
 use crate::metric::OperationResult;
 use crate::metric::tags::{PrimaryTag, Tag};
 use crate::model::{TimeRange};
@@ -100,21 +101,48 @@ impl AppState {
 
 #[derive(Deserialize)]
 struct CreateMetric {
-    name: String
+    name: String,
+    datapoint_duration: Option<f64>,
+    data_keep_time: Option<f64>,
+    faster_duration: Option<FasterDuration>
+}
+
+#[derive(Deserialize)]
+struct FasterDuration {
+    datapoint_duration: f64,
+    data_keep_time: f64,
 }
 
 async fn create_gauge_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
-    state.metrics_engine.add_gauge_metric(&input.name)?;
-    Ok(Json(json!({})).into_response())
+    create_metric(state, input, MetricType::Gauge)
 }
 
 async fn create_count_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
-    state.metrics_engine.add_count_metric(&input.name)?;
-    Ok(Json(json!({})).into_response())
+    create_metric(state, input, MetricType::Count)
 }
 
 async fn create_ratio_metric(State(state): State<Arc<AppState>>, Json(input): Json<CreateMetric>) -> ServerResult<Response> {
-    state.metrics_engine.add_ratio_metric(&input.name)?;
+    create_metric(state, input, MetricType::Ratio)
+}
+
+fn create_metric(state: Arc<AppState>, input: CreateMetric, metric_type: MetricType) -> ServerResult<Response> {
+    let mut config = MetricConfig::new(metric_type.clone());
+    if let Some(datapoint_duration) = input.datapoint_duration {
+        config.durations[0].datapoint_duration = datapoint_duration;
+    }
+
+    if let Some(data_keep_time) = input.data_keep_time {
+        config.durations[0].set_max_segments(data_keep_time);
+    }
+
+    if let Some(faster_duration) = input.faster_duration {
+        let mut duration = MetricStorageDurationConfig::default_for(metric_type.clone());
+        duration.datapoint_duration = faster_duration.datapoint_duration;
+        duration.set_max_segments(faster_duration.data_keep_time);
+        config.durations.push(duration);
+    }
+
+    state.metrics_engine.add_metric_with_config(&input.name, metric_type, config)?;
     Ok(Json(json!({})).into_response())
 }
 

@@ -11,7 +11,7 @@ def main():
 
     while True:
         # time_now = time.time()
-        time_now = 1669140681.1531835
+        time_now = 1669563603.8459792
 
         metric = "cpu_usage"
         # metric = "total_memory"

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagsStorage, PrimaryTagsStorageConfig};
+use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagsStorage, MetricConfig};
 use crate::metric::metric_operations::{MetricWindowing};
 use crate::metric::operations::{StreamingConvert, StreamingOperation, StreamingSum, StreamingTimeAverage};
 use crate::metric::{metric_operations, OperationResult};
@@ -26,7 +26,7 @@ impl<TStorage: MetricStorage<u32>> CountMetric<TStorage> {
         )
     }
 
-    pub fn with_config(base_path: &Path, config: PrimaryTagsStorageConfig) -> MetricResult<CountMetric<TStorage>> {
+    pub fn with_config(base_path: &Path, config: MetricConfig) -> MetricResult<CountMetric<TStorage>> {
         Ok(
             CountMetric {
                 primary_tags_storage: PrimaryTagsStorage::with_config(base_path, config)?

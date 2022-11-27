@@ -9,7 +9,7 @@ use tempfile::tempdir;
 use crate::engine::MetricsEngine;
 use crate::engine::io::{AddCountValue, AddGaugeValue};
 use crate::engine::querying::{MetricQuery, MetricQueryExpression};
-use crate::metric::common::{GenericMetric, MetricType, PrimaryTagsStorageConfig, StorageDurationConfig};
+use crate::metric::common::{GenericMetric, MetricType, MetricConfig, MetricStorageDurationConfig};
 use crate::metric::common::CountInput;
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::expression::{ArithmeticOperation, CompareOperation, FilterExpression, Function, TransformExpression};
@@ -445,7 +445,7 @@ fn test_gauge_segments_reload1() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
     config.durations[0].segment_duration = 6.0 * 60.0 * 60.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
 
@@ -476,7 +476,7 @@ fn test_gauge_segments_remove1() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
     config.durations[0].max_segments = Some(30);
     config.durations[0].segment_duration = 6.0 * 3600.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
@@ -501,7 +501,7 @@ fn test_gauge_segments_remove2() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
     config.durations[0].max_segments = Some(20);
     config.durations[0].segment_duration = 6.0 * 3600.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
@@ -526,8 +526,8 @@ fn test_gauge_multiple_durations1() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
-    let mut faster_duration = StorageDurationConfig::default_for(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
+    let mut faster_duration = MetricStorageDurationConfig::default_for(MetricType::Gauge);
     faster_duration.datapoint_duration = 0.1;
     config.durations.push(faster_duration);
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
@@ -552,7 +552,7 @@ fn test_gauge_multiple_durations2() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
     config.durations[0].datapoint_duration = 10.0;
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
 
@@ -593,9 +593,9 @@ fn test_gauge_multiple_durations3() {
     let start_time = 1654077600.0 + 6.0 * 24.0 * 3600.0;
     let end_time = start_time + 2.0 * 3600.0;
 
-    let mut config = PrimaryTagsStorageConfig::new(MetricType::Gauge);
+    let mut config = MetricConfig::new(MetricType::Gauge);
     config.durations[0].datapoint_duration = 10.0;
-    let mut faster_duration = StorageDurationConfig::default_for(MetricType::Gauge);
+    let mut faster_duration = MetricStorageDurationConfig::default_for(MetricType::Gauge);
     faster_duration.datapoint_duration = 1.0;
     config.durations.push(faster_duration);
     let mut metric = DefaultGaugeMetric::with_config(temp_metric_data.path(), config).unwrap();
@@ -851,8 +851,8 @@ fn test_metrics_engine1() {
     let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
-    metrics_engine.add_gauge_metric("cpu").unwrap();
-    metrics_engine.add_count_metric("perf_events").unwrap();
+    metrics_engine.add_metric("cpu", MetricType::Gauge).unwrap();
+    metrics_engine.add_metric("perf_events", MetricType::Count).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -884,7 +884,7 @@ fn test_metrics_engine_query1() {
     let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
-    metrics_engine.add_gauge_metric("cpu").unwrap();
+    metrics_engine.add_metric("cpu", MetricType::Gauge).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -924,8 +924,8 @@ fn test_metrics_engine_query2() {
     let tags_list = vec![Tag::from_ref("tag", "T1"), Tag::from_ref("tag", "T2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
-    metrics_engine.add_gauge_metric("cpu1").unwrap();
-    metrics_engine.add_gauge_metric("cpu2").unwrap();
+    metrics_engine.add_metric("cpu1", MetricType::Gauge).unwrap();
+    metrics_engine.add_metric("cpu2", MetricType::Gauge).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -971,8 +971,8 @@ fn test_metrics_engine_query3() {
     let tags_list = vec![Tag::from_ref("core", "1"), Tag::from_ref("core", "2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
-    metrics_engine.add_gauge_metric("cpu1").unwrap();
-    metrics_engine.add_gauge_metric("cpu2").unwrap();
+    metrics_engine.add_metric("cpu1", MetricType::Gauge).unwrap();
+    metrics_engine.add_metric("cpu2", MetricType::Gauge).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
@@ -1018,8 +1018,8 @@ fn test_metrics_engine_query4() {
     let tags_list = vec![Tag::from_ref("core", "1"), Tag::from_ref("core", "2")];
 
     let metrics_engine = MetricsEngine::new(&Path::new(temp_metric_data.path())).unwrap();
-    metrics_engine.add_gauge_metric("cpu1").unwrap();
-    metrics_engine.add_gauge_metric("cpu2").unwrap();
+    metrics_engine.add_metric("cpu1", MetricType::Gauge).unwrap();
+    metrics_engine.add_metric("cpu2", MetricType::Gauge).unwrap();
 
     for index in 0..SAMPLE_DATA.times.len() {
         let tags = vec![tags_list[(index % 2)].to_owned()];
