@@ -210,7 +210,7 @@ impl SecondaryTagsIndex {
         }
 
         if changed {
-            self.save().map_err(|err| MetricError::FailedToSaveSecondaryTag(err))?;
+            self.save()?;
         }
 
         let pattern = self.tags_pattern(tags.iter()).ok_or_else(|| MetricError::ExceededSecondaryTags)?;
@@ -251,21 +251,30 @@ impl SecondaryTagsIndex {
         &self.all_patterns
     }
 
-    pub fn save(&self) -> std::io::Result<()> {
-        let content = serde_json::to_string(&self)?;
-        std::fs::write(&self.base_path.join("tags.json"), &content)?;
+    pub fn save(&self) -> MetricResult<()> {
+        let save = || {
+            let content = serde_json::to_string(&self)?;
+            std::fs::write(&self.base_path.join("tags.json"), &content)?;
+            Ok(())
+        };
+
+        save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
         Ok(())
     }
 
-    pub fn load(path: &Path) -> std::io::Result<SecondaryTagsIndex> {
-        let content = std::fs::read_to_string(path)?;
-        let mut tags: SecondaryTagsIndex = serde_json::from_str(&content)?;
+    pub fn load(path: &Path) -> MetricResult<SecondaryTagsIndex> {
+        let load = || {
+            let content = std::fs::read_to_string(path)?;
+            let mut tags: SecondaryTagsIndex = serde_json::from_str(&content)?;
 
-        for (tag, tag_pattern) in tags.mapping.iter() {
-            tags.tags_pattern_to_string.insert(*tag_pattern, tag.to_owned());
-        }
+            for (tag, tag_pattern) in tags.mapping.iter() {
+                tags.tags_pattern_to_string.insert(*tag_pattern, tag.to_owned());
+            }
 
-        Ok(tags)
+            Ok(tags)
+        };
+
+        load().map_err(|err| MetricError::FailedToLoadSecondaryTag(err))
     }
 }
 

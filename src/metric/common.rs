@@ -157,7 +157,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
     pub fn add_primary_tag(&mut self, tag: PrimaryTag) -> MetricResult<()> {
         if !self.tags.contains_key(&tag) {
             let primary_tag = PrimaryTagMetric::new(&tag.path(&self.base_path), &self.config)?;
-            primary_tag.tags_index.save().map_err(|err| MetricError::FailedToSavePrimaryTag(err))?;
+            primary_tag.tags_index.save()?;
             self.tags.insert(tag, primary_tag);
             PrimaryTagsSerialization::new(&self.base_path).save(&self.tags)?;
         }
@@ -307,7 +307,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagMetric<TStorage, E> {
         Ok(
             PrimaryTagMetric {
                 storage: TStorage::from_existing(base_path)?,
-                tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json")).map_err(|err| MetricError::FailedToLoadSecondaryTag(err))?,
+                tags_index: SecondaryTagsIndex::load(&base_path.join("tags.json"))?,
                 _phantom: PhantomData::default()
             }
         )
