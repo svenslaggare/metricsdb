@@ -212,7 +212,6 @@ pub enum MetricError {
     ExceededSecondaryTags,
     FailedToSavePrimaryTag(std::io::Error),
     FailedToLoadPrimaryTag(std::io::Error),
-    FailedToSaveSecondaryTag(std::io::Error),
     FailedToLoadSecondaryTag(std::io::Error),
     FailedToCreateMetric(std::io::Error),
     FailedToRemoveMetric(std::io::Error),
