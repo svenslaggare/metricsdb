@@ -474,7 +474,7 @@ impl MetricStorageDurationConfig {
     }
 
     pub fn set_max_segments(&mut self, alive_time: f64) {
-        self.segment_duration = alive_time / 5.0;
+        self.segment_duration = (alive_time / 5.0).min(DEFAULT_SEGMENT_DURATION);
         self.max_segments = Some(1 + (self.segment_duration / alive_time).ceil() as usize);
     }
 
