@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use tdigest::TDigest;
 
 use crate::metric::expression::{ExpressionValue, FilterExpression, TransformExpression};
-use crate::metric::metric_operations::TimeRangeStatistics;
+use crate::metric::helpers::TimeRangeStatistics;
 use crate::metric::ratio::{Ratio};
 use crate::model::TimeRange;
 use crate::traits::{MinMax, ToExpressionValue};

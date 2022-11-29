@@ -3,9 +3,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagsStorage, MetricConfig};
-use crate::metric::metric_operations::{MetricWindowing, TimeRangeStatistics};
+use crate::metric::helpers::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin, StreamingApproxPercentileTDigest};
-use crate::metric::{metric_operations, OperationResult};
+use crate::metric::{helpers, OperationResult};
 use crate::metric::expression::ExpressionValue;
 use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{MetricResult, Query, Time, TIME_SCALE};
@@ -95,10 +95,10 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
             let mut streaming_operations = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
                 let storage = primary_tag.storage(None);
-                if let Some(start_block_index) = metric_operations::find_block_index(storage, start_time) {
+                if let Some(start_block_index) = helpers::find_block_index(storage, start_time) {
                     let stats = if require_statistics {
                         Some(
-                            metric_operations::determine_statistics_for_time_range(
+                            helpers::determine_statistics_for_time_range(
                                 storage,
                                 start_time,
                                 end_time,
@@ -111,7 +111,7 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
                     };
 
                     let mut streaming_operation = create_op(stats.as_ref());
-                    metric_operations::visit_datapoints_in_time_range(
+                    helpers::visit_datapoints_in_time_range(
                         storage,
                         start_time,
                         end_time,
@@ -131,7 +131,7 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
                 return None;
             }
 
-            let streaming_operation = metric_operations::merge_operations(streaming_operations);
+            let streaming_operation = helpers::merge_operations(streaming_operations);
             query.apply_output_transform(streaming_operation.value()?)
         };
 
@@ -159,13 +159,13 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
             let mut primary_tags_windowing = Vec::new();
             for (primary_tag, tags_filter) in self.primary_tags_storage.iter_for_query(tags_filter) {
                 let storage = primary_tag.storage(None);
-                if let Some(start_block_index) = metric_operations::find_block_index(storage, start_time) {
+                if let Some(start_block_index) = helpers::find_block_index(storage, start_time) {
                     let mut windowing = MetricWindowing::new(start_time, end_time, duration);
 
                     let window_stats = if require_statistics {
                         let mut window_stats = windowing.create_windows(|| None);
 
-                        metric_operations::visit_datapoints_in_time_range(
+                        helpers::visit_datapoints_in_time_range(
                             storage,
                             start_time,
                             end_time,
@@ -187,7 +187,7 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
                         None
                     };
 
-                    metric_operations::visit_datapoints_in_time_range(
+                    helpers::visit_datapoints_in_time_range(
                         storage,
                         start_time,
                         end_time,
@@ -218,8 +218,8 @@ impl<TStorage: MetricStorage<RatioU32>> RatioMetric<TStorage> {
                 return Vec::new();
             }
 
-            metric_operations::extract_operations_in_windows(
-                metric_operations::merge_windowing(primary_tags_windowing),
+            helpers::extract_operations_in_windows(
+                helpers::merge_windowing(primary_tags_windowing),
                 |value| query.apply_output_transform(value?),
                 query.remove_empty_datapoints
             )

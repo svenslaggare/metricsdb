@@ -48,7 +48,7 @@ pub enum MetricQueryExpression {
     Sum { metric: String, query: Query },
     Max { metric: String, query: Query },
     Min { metric: String, query: Query },
-    Percentile { metric: String,  query: Query, percentile: i32 },
+    Percentile { metric: String, query: Query, percentile: i32 },
     Value(f64),
     Arithmetic { operation: ArithmeticOperation, left: Box<MetricQueryExpression>, right: Box<MetricQueryExpression> },
     Function { function: Function, arguments: Vec<MetricQueryExpression> }

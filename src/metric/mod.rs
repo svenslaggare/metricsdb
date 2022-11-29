@@ -4,7 +4,7 @@ pub mod ratio;
 
 pub mod common;
 pub mod tags;
-mod metric_operations;
+mod helpers;
 pub mod operations;
 pub mod expression;
 

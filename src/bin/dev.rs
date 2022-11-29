@@ -7,7 +7,7 @@ use metricsdb::engine::engine::MetricsEngine;
 use metricsdb::engine::io::{AddCountValue, AddGaugeValue};
 use metricsdb::engine::querying::{MetricQuery, MetricQueryExpression};
 use metricsdb::helpers::{TimeMeasurement, TimeMeasurementUnit};
-use metricsdb::metric::common::{CountInput, GenericMetric};
+use metricsdb::metric::common::{CountInput, GenericMetric, MetricType};
 use metricsdb::metric::count::DefaultCountMetric;
 use metricsdb::metric::expression::{ArithmeticOperation, CompareOperation, FilterExpression, Function, TransformExpression};
 use metricsdb::metric::gauge::DefaultGaugeMetric;
@@ -257,8 +257,8 @@ fn main_engine() {
     println!("n: {}", data.times.len());
 
     let metrics_engine = MetricsEngine::new(&Path::new("test_metric_engine")).unwrap();
-    metrics_engine.add_gauge_metric("cpu").unwrap();
-    metrics_engine.add_count_metric("perf_events").unwrap();
+    metrics_engine.add_metric("cpu", MetricType::Gauge).unwrap();
+    metrics_engine.add_metric("perf_events", MetricType::Count).unwrap();
 
     {
         let _m = TimeMeasurement::new("gauge & count", TimeMeasurementUnit::Seconds);
