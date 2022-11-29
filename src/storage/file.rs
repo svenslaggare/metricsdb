@@ -21,16 +21,20 @@ pub struct FileMetricStorage<E> {
 }
 
 impl<E: Copy> FileMetricStorage<E> {
-    fn initialize(&mut self, config: &MetricStorageConfig) {
+    fn initialize(&mut self, config: &MetricStorageConfig) -> MetricResult<()> {
         unsafe {
             *self.metadata_mut() = Metadata {
                 max_segments: config.max_segments,
                 segment_duration: config.segment_duration,
                 block_duration: config.block_duration,
                 datapoint_duration: config.datapoint_duration,
-                num_segments: 1
+                num_segments: self.segments.len()
             };
+
+            self.metadata_file.sync(self.metadata() as *const u8, std::mem::size_of::<Metadata>(), false)?;
         }
+
+        Ok(())
     }
 
     unsafe fn metadata(&self) -> *const Metadata {
@@ -132,7 +136,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
             _phantom: Default::default()
         };
 
-        storage.initialize(&config);
+        storage.initialize(&config)?;
 
         Ok(storage)
     }
