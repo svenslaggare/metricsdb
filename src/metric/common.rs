@@ -81,16 +81,7 @@ impl<TStorage: MetricStorage<E>, E: Copy> PrimaryTagsStorage<TStorage, E> {
         if !base_path.exists() {
             std::fs::create_dir_all(base_path).map_err(|err| MetricError::FailedToCreateBaseDir(err))?;
         }
-
-        for entry in std::fs::read_dir(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))? {
-            if let Ok(entry) = entry {
-                if entry.path().is_dir() {
-                    std::fs::remove_dir_all(entry.path()).map_err(|err| MetricError::FailedToCreateMetric(err))?;
-                } else {
-                    std::fs::remove_file(entry.path()).map_err(|err| MetricError::FailedToCreateMetric(err))?;
-                }
-            }
-        }
+        clean_dir(base_path).map_err(|err| MetricError::FailedToCreateMetric(err))?;
 
         config.save(&base_path.join("config.json"))?;
 
@@ -573,4 +564,18 @@ fn cartesian_product_groups(group_key: &GroupKey, group_dimensions: Vec<Vec<Stri
     }
 
     group_values
+}
+
+fn clean_dir(path: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(path)? {
+        if let Ok(entry) = entry {
+            if entry.path().is_dir() {
+                std::fs::remove_dir_all(entry.path())?;
+            } else {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+    }
+
+    Ok(())
 }
