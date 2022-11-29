@@ -23,7 +23,15 @@ use crate::metric::tags::{PrimaryTag, Tag};
 use crate::model::{TimeRange};
 
 pub async fn main() {
-    let app_state = Arc::new(AppState::new());
+    let arguments = std::env::args().collect::<Vec<_>>();
+
+    let config = if arguments.len() >= 2 {
+        serde_yaml::from_str(&std::fs::read_to_string(&arguments[1]).unwrap()).unwrap()
+    } else {
+        Config::default()
+    };
+
+    let app_state = Arc::new(AppState::new(&config));
     let app = Router::with_state(app_state.clone())
         .route("/metrics/gauge", post(create_gauge_metric))
         .route("/metrics/gauge/:name", put(add_gauge_metric_value))
@@ -48,7 +56,7 @@ pub async fn main() {
         }
     });
 
-    let address = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 9090);
+    let address = SocketAddr::new(Ipv4Addr::from_str(&config.bind_url).unwrap().into(), config.bind_port);
     println!("Listening on {}", address);
     tokio::select! {
         result = axum::Server::bind(&address).serve(app.into_make_service()) => {
@@ -57,6 +65,24 @@ pub async fn main() {
         _ = tokio::signal::ctrl_c() => {
             println!("Shutting down...");
             return;
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+struct Config {
+    bind_url: String,
+    bind_port: u16,
+    storage_folder: String
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            bind_url: "127.0.0.1".to_string(),
+            bind_port: 9090,
+            storage_folder: "server_storage".to_string()
         }
     }
 }
@@ -92,9 +118,9 @@ struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> AppState {
+    pub fn new(config: &Config) -> AppState {
         AppState {
-            metrics_engine: MetricsEngine::new_or_from_existing(std::path::Path::new("server_storage")).unwrap()
+            metrics_engine: MetricsEngine::new_or_from_existing(std::path::Path::new(&config.storage_folder)).unwrap()
         }
     }
 }

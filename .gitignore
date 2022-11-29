@@ -4,3 +4,4 @@ test_metric*
 server_storage
 .idea
 output.png
+config.yaml
