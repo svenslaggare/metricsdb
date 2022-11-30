@@ -15,6 +15,7 @@ pub struct FileMetricStorage<E> {
     base_path: PathBuf,
     metadata_file: MemoryFile,
     segments: Vec<Segment<E>>,
+    last_async: std::time::Instant,
     last_sync: std::time::Instant,
     requires_sync: bool,
     _phantom: PhantomData<E>,
@@ -68,16 +69,28 @@ impl<E: Copy> FileMetricStorage<E> {
     }
 
     fn try_sync_active_block(&mut self) {
-        if self.requires_sync && ((std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL) {
-            let ok = unsafe {
-                let active_block_ptr = self.active_segment().active_block() as *const u8;
-                let active_block_size = (*self.active_segment().active_block()).size;
-                self.active_segment_mut().storage_file.sync(active_block_ptr, active_block_size, false).is_ok()
-            };
+        if self.requires_sync {
+            if (std::time::Instant::now() - self.last_sync) >= SYNC_INTERVAL {
+                let ok = unsafe {
+                    let active_block_ptr = self.active_segment().active_block() as *const u8;
+                    let active_block_size = (*self.active_segment().active_block()).size;
+                    self.active_segment_mut().storage_file.sync(active_block_ptr, active_block_size, false).is_ok()
+                };
 
-            if ok {
-                self.last_sync = std::time::Instant::now();
-                self.requires_sync = false;
+                if ok {
+                    self.last_sync = std::time::Instant::now();
+                    self.requires_sync = false;
+                }
+            } else if (std::time::Instant::now() - self.last_async) >= SYNC_INTERVAL / 2 {
+                let ok = unsafe {
+                    let active_block_ptr = self.active_segment().active_block() as *const u8;
+                    let active_block_size = (*self.active_segment().active_block()).size;
+                    self.active_segment_mut().storage_file.sync(active_block_ptr, active_block_size, true).is_ok()
+                };
+
+                if ok {
+                    self.last_async = std::time::Instant::now();
+                }
             }
         }
     }
@@ -132,6 +145,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
             metadata_file: MemoryFile::new(&base_path.join("metadata"), std::mem::size_of::<Metadata>(), true)?,
             segments: vec![Segment::new(base_path, 0)?],
             last_sync: std::time::Instant::now(),
+            last_async: std::time::Instant::now(),
             requires_sync: false,
             _phantom: Default::default()
         };
@@ -166,6 +180,7 @@ impl<E: Copy> MetricStorage<E> for FileMetricStorage<E> {
                 metadata_file: MemoryFile::new(&base_path.join("metadata"), std::mem::size_of::<Metadata>(), false)?,
                 segments,
                 last_sync: std::time::Instant::now(),
+                last_async: std::time::Instant::now(),
                 requires_sync: false,
                 _phantom: Default::default()
             }
