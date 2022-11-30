@@ -1,5 +1,4 @@
 use crate::metric::expression::ExpressionValue;
-use crate::metric::ratio::Ratio;
 
 pub trait MinMax {
     fn min(&self, other: Self) -> Self;
@@ -51,11 +50,5 @@ pub trait ToExpressionValue {
 impl ToExpressionValue for f64 {
     fn to_value(&self) -> ExpressionValue {
         ExpressionValue::Float(*self)
-    }
-}
-
-impl ToExpressionValue for Ratio {
-    fn to_value(&self) -> ExpressionValue {
-        ExpressionValue::Ratio(*self)
     }
 }

@@ -11,7 +11,7 @@ use crate::metric::tags::{PrimaryTag, Tag, TagsFilter};
 use crate::model::{MetricResult, Query, Time, TIME_SCALE};
 use crate::storage::file::FileMetricStorage;
 use crate::storage::MetricStorage;
-use crate::traits::MinMax;
+use crate::traits::{MinMax, ToExpressionValue};
 
 pub type DefaultRatioMetric = RatioMetric<FileMetricStorage<RatioU32>>;
 
@@ -370,6 +370,12 @@ impl MinMax for Ratio {
         } else {
             other
         }
+    }
+}
+
+impl ToExpressionValue for Ratio {
+    fn to_value(&self) -> ExpressionValue {
+        ExpressionValue::Ratio(*self)
     }
 }
 
