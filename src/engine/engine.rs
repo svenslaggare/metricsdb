@@ -9,11 +9,11 @@ use fnv::FnvBuildHasher;
 use crate::engine::io::{AddCountValue, AddGaugeValue, AddRatioValue, MetricsEngineError, MetricsEngineResult};
 use crate::engine::querying;
 use crate::engine::querying::MetricQuery;
-use crate::metric::common::{CountInput, GenericMetric, MetricConfig, MetricType};
+use crate::metric::common::{GenericMetric, MetricConfig, MetricType};
 use crate::metric::count::DefaultCountMetric;
 use crate::metric::gauge::DefaultGaugeMetric;
 use crate::metric::OperationResult;
-use crate::metric::ratio::{DefaultRatioMetric, RatioInput};
+use crate::metric::ratio::{DefaultRatioMetric};
 use crate::metric::tags::{PrimaryTag};
 use crate::model::Query;
 
@@ -192,7 +192,7 @@ impl MetricsEngine {
                 let mut error = None;
 
                 for value in values {
-                    match metric.add(value.time, RatioInput(CountInput(value.numerator), CountInput(value.denominator)), value.tags) {
+                    match metric.add(value.time, value.ratio, value.tags) {
                         Ok(_) => { num_success += 1; }
                         Err(err) => { error = Some(err); }
                     }

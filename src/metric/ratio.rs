@@ -2,6 +2,8 @@ use std::ops::AddAssign;
 use std::path::Path;
 use std::time::Duration;
 
+use serde::{Serialize, Deserialize};
+
 use crate::metric::common::{CountInput, GenericMetric, MetricType, PrimaryTagsStorage, MetricConfig};
 use crate::metric::helpers::{MetricWindowing, TimeRangeStatistics};
 use crate::metric::operations::{StreamingAverage, StreamingConvert, StreamingMax, StreamingOperation, StreamingRatioValue, StreamingSum, StreamingFilterOperation, StreamingMin, StreamingApproxPercentileTDigest};
@@ -421,7 +423,7 @@ impl MinMax for RatioU32 {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RatioInput(pub CountInput, pub CountInput);
 
 impl RatioInput {

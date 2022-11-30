@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::metric::common::CountInput;
+use crate::metric::ratio::RatioInput;
 use crate::metric::tags::Tag;
 use crate::model::MetricError;
 
@@ -61,17 +62,15 @@ impl AddCountValue {
 #[derive(Serialize, Deserialize)]
 pub struct AddRatioValue {
     pub time: f64,
-    pub numerator: u32,
-    pub denominator: u32,
+    pub ratio: RatioInput,
     pub tags: Vec<Tag>
 }
 
 impl AddRatioValue {
-    pub fn new(time: f64, numerator: u32, denominator: u32, tags: Vec<Tag>) -> AddRatioValue {
+    pub fn new(time: f64, ratio: RatioInput, tags: Vec<Tag>) -> AddRatioValue {
         AddRatioValue {
             time,
-            numerator,
-            denominator,
+            ratio,
             tags
         }
     }
