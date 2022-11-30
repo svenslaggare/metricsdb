@@ -120,18 +120,6 @@ impl MemoryFile {
         }
     }
 
-    pub fn bytes(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(self.address as *const u8, self.size)
-        }
-    }
-
-    pub fn bytes_mut(&mut self) -> &mut [u8] {
-        unsafe {
-            std::slice::from_raw_parts_mut(self.address as *mut u8, self.size)
-        }
-    }
-
     pub fn ptr(&self) -> *const u8 {
         self.address as *mut u8
     }
@@ -154,7 +142,7 @@ unsafe impl Sync for MemoryFile {}
 impl Drop for MemoryFile {
     fn drop(&mut self) {
         unsafe {
-            libc::munmap(self.address, self.size);
+            libc::munmap(self.address, self.size());
         }
     }
 }
