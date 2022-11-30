@@ -106,11 +106,19 @@ impl<E: Copy> FileMetricStorage<E> {
         unsafe {
             let shrink_amount = (*active_segment.active_block_mut()).compact();
             active_segment.storage_file.shrink(shrink_amount);
-            active_segment.storage_file.sync(
+            let result = active_segment.storage_file.sync(
                 active_segment.active_block() as *const u8,
                 (*active_segment.active_block()).size,
                 false
-            )?;
+            );
+
+            if result.is_err() {
+                #[allow(unused_must_use)] {
+                    new_segment.remove();
+                }
+            }
+
+            result?;
         }
 
         self.segments.push(new_segment);
